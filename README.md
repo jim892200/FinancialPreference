@@ -1,7 +1,5 @@
 # 金融商品喜好紀錄系統 (Financial Preference)
 
-> 玉山銀行後端工程師實作題 — Java + Spring Boot + Vue.js 三層式架構實作
-
 提供使用者管理金融商品喜好清單的 Web 應用，支援新增、查詢、修改、刪除四項基本功能；資料庫存取全程透過 Stored Procedure，並針對 SQL Injection 與 XSS 進行防護。
 
 ---
@@ -327,9 +325,3 @@ mvn test
 - 業務層：費用計算 (`FeeCalculator`)、Service 流程
 - 資料層：Stored Procedure 呼叫
 - 展示層：Controller HTTP 流程、輸入驗證
-
----
-
-## 版本控制
-
-本專案採用 Git 進行版本控制，依「資料庫 → 後端共用層 → 後端各層 → 前端 → 文件」順序循序提交，每個 commit 皆可獨立編譯。
