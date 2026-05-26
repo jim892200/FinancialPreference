@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "mssql": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@executeautomation/database-server",
+        "--mssql",
+        "--server", "localhost",
+        "--database", "FinancialPreference",
+        "--user", "sa",
+        "--password", "${MSSQL_PASSWORD}",
+        "--trustServerCertificate", "true"
+      ]
+    }
+  }
+}
