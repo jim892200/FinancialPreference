@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: financial-preference
+  profiles:
+    active: dev
+
+server:
+  port: 8080
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs

@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=FinancialPreference;encrypt=true;trustServerCertificate=true
+    username: sa
+    password: ${MSSQL_PASSWORD:}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+
+logging:
+  level:
+    root: INFO
+    com.esunbank: DEBUG
+    org.springframework.jdbc.core: DEBUG
