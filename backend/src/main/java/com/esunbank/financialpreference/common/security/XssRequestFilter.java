@@ -5,13 +5,16 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
-// 骨架：Phase 6 將補上 OWASP Java HTML Sanitizer 的清洗邏輯，
-// 屆時改為 wrap HttpServletRequest，sanitize body 與 query parameter。
+/**
+ * 包裝 HttpServletRequest，對 query / form parameter 進行 HTML 清洗。
+ * JSON body 的清洗由 JacksonXssConfig 註冊的 String 反序列化器在綁定 DTO 時處理。
+ */
 @Component
 @Order(1)
 public class XssRequestFilter implements Filter {
@@ -19,6 +22,10 @@ public class XssRequestFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        chain.doFilter(request, response);
+        if (request instanceof HttpServletRequest http) {
+            chain.doFilter(new SanitizingRequestWrapper(http), response);
+        } else {
+            chain.doFilter(request, response);
+        }
     }
 }
