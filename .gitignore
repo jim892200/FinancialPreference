@@ -4,6 +4,7 @@
 CLAUDE.md
 .claude/
 .claude*
+.mcp.json
 .cursorrules
 .cursor/
 .aider*
