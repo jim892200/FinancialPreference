@@ -8,6 +8,8 @@
 
 ## 目錄
 
+- [環境需求](#環境需求)
+- [安裝與執行](#安裝與執行)
 - [功能需求](#功能需求)
 - [系統架構](#系統架構)
 - [技術棧](#技術棧)
@@ -15,9 +17,64 @@
 - [資料庫設計](#資料庫設計)
 - [API 規格](#api-規格)
 - [資安防護](#資安防護)
-- [環境需求](#環境需求)
-- [安裝與執行](#安裝與執行)
 - [測試](#測試)
+
+---
+
+## 環境需求
+
+| 項目 | 版本 |
+|------|------|
+| JDK | 17 以上 |
+| Maven | 3.9 以上 |
+| Node.js | 18 以上 |
+| SQL Server | 2019 以上（或 SQL Server Express / Developer Edition） |
+
+---
+
+## 安裝與執行
+
+### 1. 資料庫初始化
+
+於 SQL Server 中建立資料庫，並依序執行下列腳本：
+
+```powershell
+sqlcmd -S localhost -d FinancialPreference -i DB/01_schema.sql
+sqlcmd -S localhost -d FinancialPreference -i DB/02_stored_procedures.sql
+sqlcmd -S localhost -d FinancialPreference -i DB/03_seed_data.sql
+```
+
+### 2. 啟動後端
+
+調整 `backend/src/main/resources/application.yml` 中的資料庫連線資訊，然後執行：
+
+```powershell
+cd backend
+mvn clean package
+mvn spring-boot:run
+```
+
+後端服務預設於 `http://localhost:8080` 提供 API。
+
+### 3. 啟動前端
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+前端開發模式預設於 `http://localhost:5173` 提供。
+
+### 4. 正式打包
+
+```powershell
+# 後端：產出可執行 jar
+cd backend && mvn clean package
+
+# 前端：產出靜態檔
+cd frontend && npm run build
+```
 
 ---
 
@@ -255,63 +312,6 @@ DELETE /api/v1/likes/{sn}
 | XSS | 後端 `XssRequestFilter` 攔截 Request，對輸入字串使用 OWASP Java HTML Sanitizer 清洗；前端 Vue 預設 escape，禁用 `v-html` |
 | 過量／格式異常輸入 | Jakarta Bean Validation：`@NotBlank`、`@Size`、`@DecimalMin`、`@Pattern` |
 | 錯誤訊息洩漏 | `GlobalExceptionHandler` 統一包裝，僅回傳定義過的錯誤碼與訊息 |
-
----
-
-## 環境需求
-
-| 項目 | 版本 |
-|------|------|
-| JDK | 17 以上 |
-| Maven | 3.9 以上 |
-| Node.js | 18 以上 |
-| SQL Server | 2019 以上（或 SQL Server Express / Developer Edition） |
-
----
-
-## 安裝與執行
-
-### 1. 資料庫初始化
-
-於 SQL Server 中建立資料庫，並依序執行下列腳本：
-
-```powershell
-sqlcmd -S localhost -d FinancialPreference -i DB/01_schema.sql
-sqlcmd -S localhost -d FinancialPreference -i DB/02_stored_procedures.sql
-sqlcmd -S localhost -d FinancialPreference -i DB/03_seed_data.sql
-```
-
-### 2. 啟動後端
-
-調整 `backend/src/main/resources/application.yml` 中的資料庫連線資訊，然後執行：
-
-```powershell
-cd backend
-mvn clean package
-mvn spring-boot:run
-```
-
-後端服務預設於 `http://localhost:8080` 提供 API。
-
-### 3. 啟動前端
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-前端開發模式預設於 `http://localhost:5173` 提供。
-
-### 4. 正式打包
-
-```powershell
-# 後端：產出可執行 jar
-cd backend && mvn clean package
-
-# 前端：產出靜態檔
-cd frontend && npm run build
-```
 
 ---
 
