@@ -63,12 +63,26 @@ docker compose up -d --build
 
 預設密碼為 `YourStrong@Passw0rd`。要改：
 
+<table>
+<tr><th>PowerShell (Windows)</th><th>bash (macOS / Linux)</th></tr>
+<tr><td>
+
 ```powershell
 $env:MSSQL_SA_PASSWORD = "<你的密碼>"
 docker compose up -d --build
 ```
 
-或於專案根目錄新增 `.env` 檔：
+</td><td>
+
+```bash
+export MSSQL_SA_PASSWORD="<你的密碼>"
+docker compose up -d --build
+```
+
+</td></tr>
+</table>
+
+或於專案根目錄新增 `.env` 檔（雙平台通用）：
 ```
 MSSQL_SA_PASSWORD=<你的密碼>
 ```
@@ -92,9 +106,9 @@ docker compose logs -f backend
 
 ### 1. 資料庫初始化
 
-於 SQL Server 中建立資料庫，並依序執行下列腳本：
+於 SQL Server 中建立資料庫，並依序執行下列腳本（指令語法雙平台通用；macOS 須先 `brew install sqlcmd`）：
 
-```powershell
+```bash
 sqlcmd -S localhost -U sa -P "<your-password>" -Q "IF DB_ID(N'FinancialPreference') IS NULL CREATE DATABASE FinancialPreference;"
 
 sqlcmd -S localhost -U sa -P "<your-password>" -d FinancialPreference -i DB/01_schema.sql
@@ -108,6 +122,10 @@ sqlcmd -S localhost -U sa -P "<your-password>" -d FinancialPreference -i DB/03_s
 
 後端從 `MSSQL_PASSWORD` 環境變數讀取 sa 密碼（可避免硬編碼）：
 
+<table>
+<tr><th>PowerShell (Windows)</th><th>bash (macOS / Linux)</th></tr>
+<tr><td>
+
 ```powershell
 $env:MSSQL_PASSWORD = "YourStrong@Passw0rd"
 
@@ -115,9 +133,21 @@ cd backend
 ./mvnw spring-boot:run
 ```
 
-或先打包再執行 jar：
+</td><td>
 
-```powershell
+```bash
+export MSSQL_PASSWORD="YourStrong@Passw0rd"
+
+cd backend
+./mvnw spring-boot:run
+```
+
+</td></tr>
+</table>
+
+或先打包再執行 jar（指令雙平台通用）：
+
+```bash
 cd backend
 ./mvnw -DskipTests package
 java -jar target/financial-preference-0.0.1-SNAPSHOT.jar
@@ -154,7 +184,7 @@ cd ../frontend
 npm run build
 ```
 
-> Windows PowerShell 5.1 不支援 `&&` / `||`，故指令分行撰寫；若使用 PowerShell 7+ 或 bash，可改用 `cd backend && ./mvnw -DskipTests package` 串接。
+> 指令採用分行撰寫以相容 Windows PowerShell 5.1（不支援 `&&` / `||`）；若使用 PowerShell 7+、bash 或 zsh，可改寫為 `cd backend && ./mvnw -DskipTests package` 串接。
 
 ---
 
