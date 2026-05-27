@@ -346,7 +346,7 @@ FinancialPreference/
 | SP 名稱 | 用途 | 涉及資料表 |
 |---------|------|----------|
 | `SP_LIKE_INSERT` | 新增喜好（含 ACCOUNT 與 USER.ACCOUNT 一致性檢查） | PRODUCT、LIKE_LIST |
-| `SP_LIKE_QUERY_BY_USER` | 依 UserID 查詢清單（三表 JOIN） | USER、PRODUCT、LIKE_LIST |
+| `SP_LIKE_QUERY_BY_USER` | 依 UserID 查詢清單（三表 JOIN），支援過濾 / 排序 / 分頁，OUT 回傳 `@TOTAL` | USER、PRODUCT、LIKE_LIST |
 | `SP_LIKE_UPDATE` | 更新產品與數量，重算金額（含 ownership 檢查） | PRODUCT、LIKE_LIST |
 | `SP_LIKE_DELETE` | 刪除喜好（含 ownership 檢查；先 LIKE_LIST 再 PRODUCT） | PRODUCT、LIKE_LIST |
 | `SP_USER_LOGIN_LOOKUP` | 登入時查 USER 與 PASSWORD_HASH | USER |
@@ -361,7 +361,7 @@ FinancialPreference/
 | A1236456789 | 王o明 | <test@email.com> |
 | B9876543210 | 陳o華 | <chen@example.com> |
 
-A 使用者 2 筆喜好、B 使用者 1 筆。
+A 使用者 42 筆喜好（含腳本以迴圈批次生成的 40 筆隨機測資，供分頁 / 排序 / 過濾驗證）、B 使用者 1 筆。
 
 ---
 
@@ -414,30 +414,50 @@ Base path: `/api/v1`
 { "code": "0000", "message": "success", "data": 7 }
 ```
 
-### 2. 查詢喜好清單 `GET /api/v1/likes?userId={id}`
+### 2. 查詢喜好清單 `GET /api/v1/likes`
 
-回應（`data` 為扁平陣列）：
+`userId` 由 JWT 帶入，**不需在 query string**。所有參數皆為可選：
+
+| 參數 | 型別 | 預設 | 說明 |
+|------|------|------|------|
+| `productName` | string | — | 產品名稱，模糊比對 `LIKE %xxx%` |
+| `account` | string | — | 扣款帳號，完全比對 |
+| `amountMin` / `amountMax` | decimal | — | 預計扣款金額區間（含端點） |
+| `feeRateMin` / `feeRateMax` | decimal | — | 費率區間（例 `0.01` = 1%） |
+| `sortBy` | string | `sn` | 排序欄位，白名單：`sn` / `productName` / `price` / `feeRate` / `purchaseQuantity` / `totalFee` / `totalAmount` |
+| `sortDir` | string | `desc` | `asc` 或 `desc` |
+| `page` | int | `1` | 頁碼（1 起算） |
+| `pageSize` | int | `10` | 每頁筆數（上限 200） |
+
+範例：`GET /api/v1/likes?productName=美元&sortBy=totalAmount&sortDir=desc&page=1&pageSize=10`
+
+回應：
 
 ```json
 {
   "code": "0000",
   "message": "success",
-  "data": [
-    {
-      "sn": 2,
-      "userId": "A1236456789",
-      "userName": "王o明",
-      "email": "test@email.com",
-      "productNo": 2,
-      "productName": "日圓基金",
-      "price": 500.00,
-      "feeRate": 0.0150,
-      "purchaseQuantity": 10,
-      "account": "1111999666",
-      "totalFee": 75.00,
-      "totalAmount": 5075.00
-    }
-  ]
+  "data": {
+    "total": 42,
+    "page": 1,
+    "pageSize": 10,
+    "items": [
+      {
+        "sn": 49,
+        "userId": "A1236456789",
+        "userName": "王o明",
+        "email": "test@email.com",
+        "productNo": 49,
+        "productName": "澳幣高息債券 039",
+        "price": 2947.00,
+        "feeRate": 0.0280,
+        "purchaseQuantity": 18,
+        "account": "1111999666",
+        "totalFee": 1485.29,
+        "totalAmount": 54531.29
+      }
+    ]
+  }
 }
 ```
 
