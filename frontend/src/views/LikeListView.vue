@@ -138,12 +138,14 @@ onMounted(refresh)
         </template>
       </el-table-column>
       <el-table-column prop="email" label="Email" min-width="160" show-overflow-tooltip />
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column label="操作" width="180" fixed="right" align="center">
         <template #default="{ row }">
-          <el-button size="small" :icon="Edit" @click="onEdit(row)">編輯</el-button>
-          <el-button size="small" type="danger" :icon="Delete" @click="onDelete(row)">
-            刪除
-          </el-button>
+          <div class="row-actions">
+            <el-button size="small" :icon="Edit" @click="onEdit(row)">編輯</el-button>
+            <el-button size="small" type="danger" :icon="Delete" @click="onDelete(row)">
+              刪除
+            </el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -179,5 +181,11 @@ onMounted(refresh)
   display: flex;
   gap: 12px;
   align-items: center;
+}
+.row-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 </style>
