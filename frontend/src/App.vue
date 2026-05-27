@@ -30,7 +30,7 @@ function onLogout() {
 
       <div class="user-area" v-if="auth.isAuthenticated">
         <span class="user-info">您好，{{ auth.userName }}（{{ auth.userId }}）</span>
-        <el-button :icon="SwitchButton" size="small" link @click="onLogout">登出</el-button>
+        <el-button class="logout-btn" :icon="SwitchButton" size="small" @click="onLogout">登出</el-button>
       </div>
     </div>
   </header>
@@ -60,6 +60,19 @@ function onLogout() {
 }
 .user-info {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #ffffff;
+  font-weight: 500;
+}
+.logout-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  font-weight: 500;
+}
+.logout-btn:hover,
+.logout-btn:focus {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: #ffffff;
+  color: #ffffff;
 }
 </style>
