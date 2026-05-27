@@ -19,8 +19,9 @@
 
     <properties>
         <java.version>17</java.version>
-        <springdoc.version>2.6.0</springdoc.version>
+        <springdoc.version>2.8.5</springdoc.version>
         <owasp.sanitizer.version>20240325.1</owasp.sanitizer.version>
+        <jacoco.version>0.8.12</jacoco.version>
     </properties>
 
     <dependencies>
@@ -70,6 +71,31 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals><goal>prepare-agent</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals><goal>report</goal></goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <excludes>
+                        <exclude>**/FinancialPreferenceApplication.class</exclude>
+                        <exclude>**/dto/**</exclude>
+                        <exclude>**/command/**</exclude>
+                        <exclude>**/domain/**</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
         </plugins>
     </build>
