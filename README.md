@@ -113,11 +113,15 @@ npm run dev
 
 ```powershell
 # 後端：產出可執行 jar
-cd backend && ./mvnw -DskipTests package
+cd backend
+./mvnw -DskipTests package
 
 # 前端：產出靜態檔（給 Nginx 之類的 Web Server）
-cd frontend && npm run build
+cd ../frontend
+npm run build
 ```
+
+> Windows PowerShell 5.1 不支援 `&&` / `||`，故指令分行撰寫；若使用 PowerShell 7+ 或 bash，可改用 `cd backend && ./mvnw -DskipTests package` 串接。
 
 ---
 
