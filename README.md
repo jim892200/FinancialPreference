@@ -1,6 +1,6 @@
 # 金融商品喜好紀錄系統 (Financial Preference)
 
-提供使用者管理金融商品喜好清單的 Web 應用，支援新增、查詢、修改、刪除四項基本功能；資料庫存取全程透過 Stored Procedure，並針對 SQL Injection 與 XSS 進行防護。
+提供使用者管理金融商品喜好清單的 Web 應用，支援新增、查詢、修改、刪除四項基本功能；資料庫存取全程透過 Stored Procedure，以 JWT 保護端點並針對 SQL Injection 與 XSS 進行防護。
 
 ---
 
@@ -225,13 +225,14 @@ npm run build
 
 | 類別 | 技術 |
 |------|------|
-| 前端 | Vue.js 3.5 + Vite 8 + Axios + vue-router 4 |
+| 前端 | Vue.js 3.5 + Vite 8 + Axios + vue-router 4 + Pinia |
 | 後端框架 | Spring Boot 3.5.0（Java 17） |
 | 建置工具 | Maven（內附 mvnw Wrapper） |
 | 資料庫 | Microsoft SQL Server 2022 |
 | 資料庫存取 | Stored Procedure（透過 `SimpleJdbcCall` 具名參數綁定） |
 | API 風格 | RESTful (JSON) |
 | 驗證 | Jakarta Bean Validation（Hibernate Validator） |
+| 認證 | Spring Security + jjwt 0.12（JWT、stateless） |
 | 資安 | OWASP Java HTML Sanitizer + Jackson 自訂反序列化器 |
 | API 文件 | springdoc-openapi 2.8（OpenAPI 3.1） |
 | 測試 | JUnit 5 + Mockito + Spring Boot Test |
@@ -254,20 +255,21 @@ FinancialPreference/
 │       ├── main/
 │       │   ├── java/com/esunbank/financialpreference/
 │       │   │   ├── presentation/       # 展示層
-│       │   │   │   ├── controller/     #   LikeListController
+│       │   │   │   ├── controller/     #   LikeListController / AuthController
 │       │   │   │   ├── dto/            #   ApiResponse / request / response
 │       │   │   │   └── advice/         #   GlobalExceptionHandler
 │       │   │   ├── business/           # 業務層
-│       │   │   │   ├── service/        #   LikeListService (@Transactional)
+│       │   │   │   ├── service/        #   LikeListService / AuthService (@Transactional)
 │       │   │   │   ├── command/        #   CreateLikeCommand / UpdateLikeCommand
 │       │   │   │   ├── domain/         #   User / Product / LikeItem
 │       │   │   │   └── calculator/     #   FeeCalculator
 │       │   │   ├── data/               # 資料層
-│       │   │   │   ├── repository/     #   LikeListRepository (SimpleJdbcCall)
+│       │   │   │   ├── repository/     #   LikeListRepository / UserRepository (SimpleJdbcCall)
 │       │   │   │   └── mapper/         #   LikeItemRowMapper
 │       │   │   └── common/             # 共用層
 │       │   │       ├── config/         #   WebMvcConfig / OpenApiConfig / JacksonXssConfig
-│       │   │       ├── security/       #   HtmlSanitizer / SanitizingRequestWrapper / XssRequestFilter
+│       │   │       ├── security/       #   SecurityConfig / JwtService / JwtAuthenticationFilter
+│       │   │       │                    #   HtmlSanitizer / XssRequestFilter / RawStringDeserializer
 │       │   │       ├── exception/      #   ErrorCode / BusinessException
 │       │   │       └── util/           #   MoneyUtil / Constants
 │       │   └── resources/
@@ -279,9 +281,10 @@ FinancialPreference/
 │   ├── package.json
 │   ├── vite.config.js                  # /api 反向代理至 :8080
 │   └── src/
-│       ├── api/likeListApi.js          # axios 封裝
-│       ├── views/                      # LikeListView / LikeFormView
-│       ├── router/index.js
+│       ├── api/                        # http.js (Bearer / 401 redirect) / likeListApi / authApi
+│       ├── stores/auth.js              # Pinia auth store（localStorage 持久化）
+│       ├── views/                      # LoginView / LikeListView / LikeFormView
+│       ├── router/index.js             # beforeEach 守衛
 │       ├── App.vue
 │       └── main.js
 │
@@ -302,10 +305,11 @@ FinancialPreference/
 
 | 欄位 | 型別 | 說明 |
 |------|------|------|
-| `USER_ID` | VARCHAR(20) PK | 使用者 ID |
+| `USER_ID` | VARCHAR(20) PK | 使用者 ID（同登入帳號） |
 | `USER_NAME` | NVARCHAR(50) | 使用者名稱 |
 | `EMAIL` | VARCHAR(100) | 電子郵件 |
 | `ACCOUNT` | VARCHAR(20) | 扣款帳號 |
+| `PASSWORD_HASH` | VARCHAR(72) | BCrypt 雜湊（dev/docker 首次啟動由 seed runner 填入） |
 
 #### `PRODUCT` 產品資料表
 
@@ -341,10 +345,12 @@ FinancialPreference/
 
 | SP 名稱 | 用途 | 涉及資料表 |
 |---------|------|----------|
-| `SP_LIKE_INSERT` | 新增喜好（INSERT PRODUCT 取 SCOPE_IDENTITY 後 INSERT LIKE_LIST） | PRODUCT、LIKE_LIST |
+| `SP_LIKE_INSERT` | 新增喜好（含 ACCOUNT 與 USER.ACCOUNT 一致性檢查） | PRODUCT、LIKE_LIST |
 | `SP_LIKE_QUERY_BY_USER` | 依 UserID 查詢清單（三表 JOIN） | USER、PRODUCT、LIKE_LIST |
-| `SP_LIKE_UPDATE` | 更新產品與數量，重算金額 | PRODUCT、LIKE_LIST |
-| `SP_LIKE_DELETE` | 刪除喜好（先 LIKE_LIST 再 PRODUCT，FK 順序） | PRODUCT、LIKE_LIST |
+| `SP_LIKE_UPDATE` | 更新產品與數量，重算金額（含 ownership 檢查） | PRODUCT、LIKE_LIST |
+| `SP_LIKE_DELETE` | 刪除喜好（含 ownership 檢查；先 LIKE_LIST 再 PRODUCT） | PRODUCT、LIKE_LIST |
+| `SP_USER_LOGIN_LOOKUP` | 登入時查 USER 與 PASSWORD_HASH | USER |
+| `SP_USER_LIST_PENDING_PASSWORDS` / `SP_USER_SET_PASSWORD_HASH` | seed runner 補 BCrypt 雜湊用 | USER |
 
 所有 SP 均以**具名參數**呼叫；跨表異動的 SP 內部含 `BEGIN TRY / BEGIN TRAN / COMMIT / ROLLBACK / THROW`，Java Service 層再以 `@Transactional(rollbackFor = Exception.class)` 包覆，**雙重保障**資料一致性。
 
@@ -369,13 +375,31 @@ Base path: `/api/v1`
 { "code": "0000", "message": "success", "data": ... }
 ```
 
-### 1. 新增喜好商品 `POST /api/v1/likes`
+除 `/auth/login` 外，所有 `/api/v1/**` 端點皆需在 Header 帶 `Authorization: Bearer <token>`。`userId` 一律由 JWT 取得，不接受由 client 傳入。
+
+### 0. 登入 `POST /api/v1/auth/login`
 
 請求：
 
 ```json
+{ "userId": "A1236456789", "password": "Test@1234" }
+```
+
+回應（`data.token` 即 JWT，預設 1 小時到期）：
+
+```json
+{ "code": "0000", "message": "success",
+  "data": { "userId": "A1236456789", "userName": "王o明", "account": "1111999666", "token": "eyJ..." } }
+```
+
+> dev/docker profile 啟動時，會自動為 seed user 補上預設密碼 `Test@1234`。
+
+### 1. 新增喜好商品 `POST /api/v1/likes`
+
+請求（`userId` 由 JWT 帶入，不在 body 中）：
+
+```json
 {
-  "userId": "A1236456789",
   "productName": "美元定存",
   "price": 1000.00,
   "feeRate": 0.0100,
@@ -432,6 +456,10 @@ Base path: `/api/v1`
 | `0000` | 200 / 201 | 成功 |
 | `4000` | 400 | Bean Validation 失敗（空字串、超長、負數、quantity = 0…） |
 | `4001` | 400 | quantity 不合法 |
+| `4002` | 400 | ACCOUNT 與 USER.ACCOUNT 不一致 |
+| `4010` | 401 | 未帶 / 無效 JWT |
+| `4011` | 401 | 登入帳號密碼錯誤 |
+| `4030` | 403 | 嘗試操作他人的喜好商品（ownership） |
 | `4040` | 404 | USER_ID 不存在 |
 | `4041` | 404 | SN 不存在 |
 | `5000` | 500 | 未預期錯誤（不洩漏 stack trace） |
@@ -444,6 +472,7 @@ Base path: `/api/v1`
 
 | 威脅 | 對策 | 實作 |
 |------|------|------|
+| **未驗身分 / IDOR** | JWT 保護所有 `/likes/**`，SP 端再以 `@USER_ID` 比對 ownership | `SecurityConfig` (stateless) + `JwtAuthenticationFilter` + SP 內 `50004` 檢查 |
 | **SQL Injection** | 全面採用 Stored Procedure + 具名參數綁定，禁用任何字串拼接 SQL | `SimpleJdbcCall` + `MapSqlParameterSource.addValue(name, value, Types.X)` → JDBC PreparedStatement `?` 佔位符 |
 | **XSS（JSON body）** | OWASP Java HTML Sanitizer 在反序列化階段清洗 String 欄位 | `JacksonXssConfig` 註冊全域 String `JsonDeserializer` |
 | **XSS（query / form）** | HttpServletRequestWrapper 清洗所有參數 | `XssRequestFilter` + `SanitizingRequestWrapper` |
@@ -466,25 +495,12 @@ cd backend
 
 | 測試類 | 個數 | 範圍 |
 |--------|------|------|
-| `MoneyUtilTest` | 5 | BigDecimal 精度與進位 |
-| `HtmlSanitizerTest` | 7 | XSS 清洗策略 |
-| `SanitizingRequestWrapperTest` | 5 | Query/Form param 清洗 |
-| `FeeCalculatorTest` | 4 | 金額重算公式 |
-| `LikeListServiceTest` | 7 | Service + SP 錯誤碼轉譯 |
-| `LikeListControllerTest` | 12 | 4 endpoints × happy / 驗證 / 業務錯誤 |
-| `XssIntegrationTest` | 3 | End-to-end XSS 攔截 |
-| `LikeListRepositoryIntegrationTest` | 3 | 對真 DB round-trip |
-| `FinancialPreferenceApplicationTests` | 1 | Spring context load |
-| **小計** | **47** | |
+共 **67 個測試**（其中 3 個 Repository 集成測試以 `@EnabledIfEnvironmentVariable(MSSQL_PASSWORD)` 控管，未設密碼時自動 skip），涵蓋：
 
-> Repository 集成測試以 `@EnabledIfEnvironmentVariable(MSSQL_PASSWORD)` 控管 — 未設定密碼時自動 skip，方便無 DB 環境 build。
+- 工具與計算：`MoneyUtilTest`、`FeeCalculatorTest`
+- 資安：`HtmlSanitizerTest`、`SanitizingRequestWrapperTest`、`XssIntegrationTest`、`AuthControllerPasswordSanitizationTest`
+- 認證 / 授權：`JwtServiceTest`、`AuthServiceTest`、`AuthControllerTest`、`LikeListSecurityTest`
+- 業務 / API：`LikeListServiceTest`、`LikeListControllerTest`
+- 集成：`LikeListRepositoryIntegrationTest`、`FinancialPreferenceApplicationTests`
 
-### JaCoCo 覆蓋率
-
-| 指標 | 比例 |
-|------|------|
-| Instruction | 92.1% |
-| Line | 92.6% |
-| Branch | 70.0% |
-
-報告位置：`backend/target/site/jacoco/index.html`（執行 `./mvnw test` 後產生）。
+JaCoCo 報告：`backend/target/site/jacoco/index.html`（執行 `./mvnw test` 後產生）。
