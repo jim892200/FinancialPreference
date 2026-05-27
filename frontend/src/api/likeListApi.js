@@ -1,8 +1,12 @@
 import { http } from './http.js'
 
-export async function listLikes() {
-  const { data } = await http.get('/likes')
-  return data.data ?? []
+export async function listLikes(params = {}) {
+  const cleaned = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== null && v !== undefined && v !== '') cleaned[k] = v
+  }
+  const { data } = await http.get('/likes', { params: cleaned })
+  return data.data ?? { items: [], total: 0, page: 1, pageSize: 10 }
 }
 
 export async function createLike(payload) {

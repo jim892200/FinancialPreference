@@ -3,6 +3,8 @@ package com.esunbank.financialpreference.business.service;
 import com.esunbank.financialpreference.business.command.CreateLikeCommand;
 import com.esunbank.financialpreference.business.command.UpdateLikeCommand;
 import com.esunbank.financialpreference.business.domain.LikeItem;
+import com.esunbank.financialpreference.business.query.LikeListQuery;
+import com.esunbank.financialpreference.business.query.PagedResult;
 import com.esunbank.financialpreference.common.exception.BusinessException;
 import com.esunbank.financialpreference.common.exception.ErrorCode;
 import com.esunbank.financialpreference.data.repository.LikeListRepository;
@@ -62,6 +64,11 @@ public class LikeListService {
     @Transactional(readOnly = true)
     public List<LikeItem> listByUserId(String userId) {
         return repository.findByUserId(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<LikeItem> listByUserId(String userId, LikeListQuery query) {
+        return repository.findByUserId(userId, query);
     }
 
     @Transactional(rollbackFor = Exception.class)

@@ -98,17 +98,40 @@ GO
 -- =============================================================================
 -- SP_LIKE_QUERY_BY_USER
 --   依 USER_ID 撈出該使用者完整喜好清單（USER + PRODUCT + LIKE_LIST 三表 JOIN）
+--   所有 filter 參數皆為 nullable：NULL 代表「不套用此條件」
+--     @PRODUCT_NAME    LIKE '%xxx%' 模糊比對（NULL → 不過濾）
+--     @ACCOUNT         完全比對
+--     @AMOUNT_MIN/MAX  TOTAL_AMOUNT 區間（含端點）
+--     @FEE_RATE_MIN/MAX FEE_RATE 區間（含端點）
 -- =============================================================================
 IF OBJECT_ID(N'dbo.SP_LIKE_QUERY_BY_USER', N'P') IS NOT NULL
     DROP PROCEDURE dbo.SP_LIKE_QUERY_BY_USER;
 GO
 
 CREATE PROCEDURE dbo.SP_LIKE_QUERY_BY_USER
-    @USER_ID VARCHAR(20)
+    @USER_ID        VARCHAR(20),
+    @PRODUCT_NAME   NVARCHAR(100)  = NULL,
+    @ACCOUNT        VARCHAR(20)    = NULL,
+    @AMOUNT_MIN     DECIMAL(18, 2) = NULL,
+    @AMOUNT_MAX     DECIMAL(18, 2) = NULL,
+    @FEE_RATE_MIN   DECIMAL(5, 4)  = NULL,
+    @FEE_RATE_MAX   DECIMAL(5, 4)  = NULL,
+    @SORT_BY        VARCHAR(20)    = 'sn',     -- sn|productName|price|feeRate|purchaseQuantity|totalFee|totalAmount
+    @SORT_DIR       VARCHAR(4)     = 'desc',   -- asc | desc
+    @PAGE           INT            = 1,
+    @PAGE_SIZE      INT            = 10,
+    @TOTAL          BIGINT         OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- 防呆與上限：避免 client 帶非法值
+    IF @PAGE      IS NULL OR @PAGE      < 1   SET @PAGE      = 1;
+    IF @PAGE_SIZE IS NULL OR @PAGE_SIZE < 1   SET @PAGE_SIZE = 10;
+    IF @PAGE_SIZE > 200                       SET @PAGE_SIZE = 200;
+    IF @SORT_DIR  IS NULL OR @SORT_DIR NOT IN ('asc', 'desc') SET @SORT_DIR = 'desc';
+
+    -- 先把過濾後完整 row 物化到 temp，避免重算 WHERE 兩次
     SELECT  L.SN,
             U.USER_ID,
             U.USER_NAME,
@@ -121,11 +144,42 @@ BEGIN
             L.ACCOUNT,
             L.TOTAL_FEE,
             L.TOTAL_AMOUNT
+    INTO    #filtered
     FROM    dbo.LIKE_LIST  L
     JOIN    dbo.[USER]     U ON U.USER_ID = L.USER_ID
     JOIN    dbo.PRODUCT    P ON P.NO      = L.PRODUCT_NO
     WHERE   L.USER_ID = @USER_ID
-    ORDER BY L.SN DESC;
+      AND   (@PRODUCT_NAME IS NULL OR P.PRODUCT_NAME LIKE N'%' + @PRODUCT_NAME + N'%')
+      AND   (@ACCOUNT      IS NULL OR L.ACCOUNT      = @ACCOUNT)
+      AND   (@AMOUNT_MIN   IS NULL OR L.TOTAL_AMOUNT >= @AMOUNT_MIN)
+      AND   (@AMOUNT_MAX   IS NULL OR L.TOTAL_AMOUNT <= @AMOUNT_MAX)
+      AND   (@FEE_RATE_MIN IS NULL OR P.FEE_RATE     >= @FEE_RATE_MIN)
+      AND   (@FEE_RATE_MAX IS NULL OR P.FEE_RATE     <= @FEE_RATE_MAX);
+
+    SELECT @TOTAL = COUNT(*) FROM #filtered;
+
+    -- 動態排序以 CASE 白名單避開字串拼接（安全）
+    -- 每個欄位以 ASC / DESC 各一個 CASE 表示；無命中時為 NULL → 不影響排序
+    SELECT *
+    FROM   #filtered
+    ORDER BY
+        CASE WHEN @SORT_BY = 'sn'               AND @SORT_DIR = 'asc'  THEN SN END ASC,
+        CASE WHEN @SORT_BY = 'sn'               AND @SORT_DIR = 'desc' THEN SN END DESC,
+        CASE WHEN @SORT_BY = 'productName'      AND @SORT_DIR = 'asc'  THEN PRODUCT_NAME END ASC,
+        CASE WHEN @SORT_BY = 'productName'      AND @SORT_DIR = 'desc' THEN PRODUCT_NAME END DESC,
+        CASE WHEN @SORT_BY = 'price'            AND @SORT_DIR = 'asc'  THEN PRICE END ASC,
+        CASE WHEN @SORT_BY = 'price'            AND @SORT_DIR = 'desc' THEN PRICE END DESC,
+        CASE WHEN @SORT_BY = 'feeRate'          AND @SORT_DIR = 'asc'  THEN FEE_RATE END ASC,
+        CASE WHEN @SORT_BY = 'feeRate'          AND @SORT_DIR = 'desc' THEN FEE_RATE END DESC,
+        CASE WHEN @SORT_BY = 'purchaseQuantity' AND @SORT_DIR = 'asc'  THEN PURCHASE_QUANTITY END ASC,
+        CASE WHEN @SORT_BY = 'purchaseQuantity' AND @SORT_DIR = 'desc' THEN PURCHASE_QUANTITY END DESC,
+        CASE WHEN @SORT_BY = 'totalFee'         AND @SORT_DIR = 'asc'  THEN TOTAL_FEE END ASC,
+        CASE WHEN @SORT_BY = 'totalFee'         AND @SORT_DIR = 'desc' THEN TOTAL_FEE END DESC,
+        CASE WHEN @SORT_BY = 'totalAmount'      AND @SORT_DIR = 'asc'  THEN TOTAL_AMOUNT END ASC,
+        CASE WHEN @SORT_BY = 'totalAmount'      AND @SORT_DIR = 'desc' THEN TOTAL_AMOUNT END DESC,
+        SN DESC   -- 最後的 tiebreaker，保證頁與頁之間順序穩定
+    OFFSET (@PAGE - 1) * @PAGE_SIZE ROWS
+    FETCH NEXT @PAGE_SIZE ROWS ONLY;
 END
 GO
 

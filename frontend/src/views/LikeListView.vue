@@ -1,26 +1,96 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Search, RefreshLeft } from '@element-plus/icons-vue'
 import { listLikes, deleteLike } from '../api/likeListApi.js'
 import { useAuthStore } from '../stores/auth.js'
 
 const router = useRouter()
 const auth = useAuthStore()
 const items = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(10)
+const sortBy = ref('sn')
+const sortDir = ref('desc')
 const loading = ref(false)
+
+const emptyFilters = () => ({
+  productName: '',
+  account: '',
+  amountMin: null,
+  amountMax: null,
+  feeRateMin: null,
+  feeRateMax: null,
+})
+const filters = reactive(emptyFilters())
+
+function toQueryParams() {
+  return {
+    productName: filters.productName,
+    account: filters.account,
+    amountMin: filters.amountMin,
+    amountMax: filters.amountMax,
+    // 前端用百分比輸入（例 1.5），送 API 前轉成小數（0.015）
+    feeRateMin: filters.feeRateMin == null ? null : Number(filters.feeRateMin) / 100,
+    feeRateMax: filters.feeRateMax == null ? null : Number(filters.feeRateMax) / 100,
+    sortBy: sortBy.value,
+    sortDir: sortDir.value,
+    page: page.value,
+    pageSize: pageSize.value,
+  }
+}
 
 async function refresh() {
   loading.value = true
   try {
-    items.value = await listLikes()
+    const result = await listLikes(toQueryParams())
+    items.value = result.items ?? []
+    total.value = result.total ?? 0
   } catch (err) {
     ElMessage.error(err.apiMessage || '載入失敗')
     items.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
+}
+
+function submitFilters() {
+  page.value = 1   // 變更過濾條件後永遠跳回第 1 頁，避免落在不存在的頁碼
+  refresh()
+}
+
+function resetFilters() {
+  Object.assign(filters, emptyFilters())
+  page.value = 1
+  sortBy.value = 'sn'
+  sortDir.value = 'desc'
+  refresh()
+}
+
+function onSortChange({ prop, order }) {
+  // el-table 的 order: 'ascending' | 'descending' | null
+  if (!order) {
+    sortBy.value = 'sn'
+    sortDir.value = 'desc'
+  } else {
+    sortBy.value = prop
+    sortDir.value = order === 'ascending' ? 'asc' : 'desc'
+  }
+  refresh()
+}
+
+function onPageChange(newPage) {
+  page.value = newPage
+  refresh()
+}
+
+function onPageSizeChange(newSize) {
+  pageSize.value = newSize
+  page.value = 1
+  refresh()
 }
 
 async function onDelete(item) {
@@ -82,8 +152,8 @@ onMounted(refresh)
       <div class="card-header">
         <div class="left">
           <span class="card-title">{{ auth.userName }} 的喜好商品清單</span>
-          <span class="user-info" v-if="items.length > 0">
-            共 {{ items.length }} 筆
+          <span class="user-info" v-if="total > 0">
+            共 {{ total }} 筆
           </span>
         </div>
         <div class="right">
@@ -94,33 +164,70 @@ onMounted(refresh)
       </div>
     </template>
 
+    <el-form :model="filters" inline class="filter-bar" @submit.prevent="submitFilters">
+      <el-form-item label="產品名稱">
+        <el-input
+          v-model="filters.productName"
+          placeholder="模糊比對"
+          clearable
+          style="width: 160px"
+          @keyup.enter="submitFilters"
+        />
+      </el-form-item>
+      <el-form-item label="扣款帳號">
+        <el-input
+          v-model="filters.account"
+          placeholder="完全比對"
+          clearable
+          style="width: 160px"
+          @keyup.enter="submitFilters"
+        />
+      </el-form-item>
+      <el-form-item label="預計扣款">
+        <el-input-number v-model="filters.amountMin" :min="0" :controls="false" placeholder="下限" style="width: 110px" />
+        <span class="range-dash">~</span>
+        <el-input-number v-model="filters.amountMax" :min="0" :controls="false" placeholder="上限" style="width: 110px" />
+      </el-form-item>
+      <el-form-item label="費率(%)">
+        <el-input-number v-model="filters.feeRateMin" :min="0" :max="100" :precision="2" :controls="false" placeholder="下限" style="width: 100px" />
+        <span class="range-dash">~</span>
+        <el-input-number v-model="filters.feeRateMax" :min="0" :max="100" :precision="2" :controls="false" placeholder="上限" style="width: 100px" />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" :icon="Search" @click="submitFilters">查詢</el-button>
+        <el-button :icon="RefreshLeft" @click="resetFilters">重置</el-button>
+      </el-form-item>
+    </el-form>
+
     <el-table
       v-loading="loading"
       :data="items"
       stripe
       empty-text="尚無喜好商品"
       style="width: 100%"
+      :default-sort="{ prop: sortBy, order: sortDir === 'asc' ? 'ascending' : 'descending' }"
+      @sort-change="onSortChange"
     >
-      <el-table-column prop="sn" label="SN" width="70" />
-      <el-table-column prop="productName" label="產品名稱" min-width="160" />
-      <el-table-column label="價格" align="right" width="120">
+      <el-table-column prop="sn" label="SN" width="80" sortable="custom" />
+      <el-table-column prop="productName" label="產品名稱" min-width="160" sortable="custom" />
+      <el-table-column prop="price" label="價格" align="right" width="120" sortable="custom">
         <template #default="{ row }">
           <span class="num-cell">{{ formatMoney(row.price) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="費率" align="right" width="90">
+      <el-table-column prop="feeRate" label="費率" align="right" width="100" sortable="custom">
         <template #default="{ row }">
           <span class="num-cell">{{ formatFeeRate(row.feeRate) }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="purchaseQuantity" label="數量" align="right" width="80" />
+      <el-table-column prop="purchaseQuantity" label="數量" align="right" width="90" sortable="custom" />
       <el-table-column prop="account" label="扣款帳號" width="140" />
-      <el-table-column label="總手續費" align="right" width="120">
+      <el-table-column prop="totalFee" label="總手續費" align="right" width="120" sortable="custom">
         <template #default="{ row }">
           <span class="num-cell">{{ formatMoney(row.totalFee) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="預計扣款" align="right" width="140">
+      <el-table-column prop="totalAmount" label="預計扣款" align="right" width="140" sortable="custom">
         <template #default="{ row }">
           <span class="amount-strong">{{ formatMoney(row.totalAmount) }}</span>
         </template>
@@ -137,6 +244,18 @@ onMounted(refresh)
         </template>
       </el-table-column>
     </el-table>
+
+    <el-pagination
+      class="pagination"
+      :current-page="page"
+      :page-size="pageSize"
+      :total="total"
+      :page-sizes="[10, 20, 50, 100]"
+      layout="total, sizes, prev, pager, next, jumper"
+      background
+      @current-change="onPageChange"
+      @size-change="onPageSizeChange"
+    />
   </el-card>
 </template>
 
@@ -169,6 +288,20 @@ onMounted(refresh)
   display: flex;
   gap: 12px;
   align-items: center;
+}
+.filter-bar {
+  padding: 12px 0 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.range-dash {
+  color: #909399;
+  margin: 0 6px;
+}
+.pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 .row-actions {
   display: inline-flex;

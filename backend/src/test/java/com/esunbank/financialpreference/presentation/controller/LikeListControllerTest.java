@@ -5,6 +5,7 @@ import com.esunbank.financialpreference.business.command.UpdateLikeCommand;
 import com.esunbank.financialpreference.business.domain.LikeItem;
 import com.esunbank.financialpreference.business.domain.Product;
 import com.esunbank.financialpreference.business.domain.User;
+import com.esunbank.financialpreference.business.query.PagedResult;
 import com.esunbank.financialpreference.business.service.LikeListService;
 import com.esunbank.financialpreference.common.exception.BusinessException;
 import com.esunbank.financialpreference.common.exception.ErrorCode;
@@ -161,24 +162,30 @@ class LikeListControllerTest {
                 new BigDecimal("5.00"),
                 new BigDecimal("505.00")
         );
-        when(service.listByUserId(USER_A)).thenReturn(List.of(item));
+        when(service.listByUserId(eq(USER_A), any()))
+                .thenReturn(new PagedResult<>(List.of(item), 1L, 1, 10));
 
         mvc.perform(get("/api/v1/likes").principal(authAs(USER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
-                .andExpect(jsonPath("$.data[0].sn").value(1))
-                .andExpect(jsonPath("$.data[0].userName").value("王o明"))
-                .andExpect(jsonPath("$.data[0].totalAmount").value(505.00));
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(10))
+                .andExpect(jsonPath("$.data.items[0].sn").value(1))
+                .andExpect(jsonPath("$.data.items[0].userName").value("王o明"))
+                .andExpect(jsonPath("$.data.items[0].totalAmount").value(505.00));
     }
 
     @Test
     void list_emptyResult_returnsEmptyArray() throws Exception {
-        when(service.listByUserId(USER_A)).thenReturn(List.of());
+        when(service.listByUserId(eq(USER_A), any()))
+                .thenReturn(new PagedResult<>(List.of(), 0L, 1, 10));
 
         mvc.perform(get("/api/v1/likes").principal(authAs(USER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
-                .andExpect(jsonPath("$.data").isArray());
+                .andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.items").isArray());
     }
 
     // ---------- PUT ----------

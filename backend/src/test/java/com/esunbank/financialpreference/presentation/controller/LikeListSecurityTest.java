@@ -1,5 +1,6 @@
 package com.esunbank.financialpreference.presentation.controller;
 
+import com.esunbank.financialpreference.business.query.PagedResult;
 import com.esunbank.financialpreference.business.service.LikeListService;
 import com.esunbank.financialpreference.common.security.JwtService;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -51,7 +53,8 @@ class LikeListSecurityTest {
 
     @Test
     void validToken_passesThroughToController() throws Exception {
-        when(likeListService.listByUserId(eq("A1236456789"))).thenReturn(List.of());
+        when(likeListService.listByUserId(eq("A1236456789"), any()))
+                .thenReturn(new PagedResult<>(List.of(), 0L, 1, 10));
 
         String jwt = jwtService.issue("A1236456789").token();
 

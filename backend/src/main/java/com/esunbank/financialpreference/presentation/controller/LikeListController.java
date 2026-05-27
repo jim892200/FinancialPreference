@@ -1,10 +1,12 @@
 package com.esunbank.financialpreference.presentation.controller;
 
+import com.esunbank.financialpreference.business.query.LikeListQuery;
 import com.esunbank.financialpreference.business.service.LikeListService;
 import com.esunbank.financialpreference.presentation.dto.ApiResponse;
 import com.esunbank.financialpreference.presentation.dto.request.CreateLikeRequest;
 import com.esunbank.financialpreference.presentation.dto.request.UpdateLikeRequest;
 import com.esunbank.financialpreference.presentation.dto.response.LikeItemResponse;
+import com.esunbank.financialpreference.presentation.dto.response.PagedResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -22,10 +24,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.security.Principal;
-import java.util.List;
 
 /**
  * 喜好清單 CRUD。所有端點均需 JWT；userId 一律從 JWT principal 取得，
@@ -58,16 +61,30 @@ public class LikeListController {
     }
 
     @GetMapping
-    @Operation(summary = "查詢喜好清單", description = "回傳當前登入者的所有喜好商品（三表 JOIN）")
+    @Operation(summary = "查詢喜好清單",
+            description = "回傳當前登入者的喜好商品，支援過濾 / 排序 / 分頁。預設第 1 頁、每頁 10 筆、依 SN DESC")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "查詢成功（空陣列亦為成功）"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "查詢成功（空清單亦為成功）"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未登入")
     })
-    public ApiResponse<List<LikeItemResponse>> list(Principal principal) {
-        List<LikeItemResponse> items = service.listByUserId(principal.getName()).stream()
-                .map(LikeItemResponse::from)
-                .toList();
-        return ApiResponse.success(items);
+    public ApiResponse<PagedResponse<LikeItemResponse>> list(
+            Principal principal,
+            @Parameter(description = "產品名稱（模糊比對，LIKE %xxx%）") @RequestParam(required = false) String productName,
+            @Parameter(description = "扣款帳號（完全比對）")             @RequestParam(required = false) String account,
+            @Parameter(description = "預計扣款下限")                      @RequestParam(required = false) BigDecimal amountMin,
+            @Parameter(description = "預計扣款上限")                      @RequestParam(required = false) BigDecimal amountMax,
+            @Parameter(description = "費率下限（例 0.01 = 1%）")          @RequestParam(required = false) BigDecimal feeRateMin,
+            @Parameter(description = "費率上限")                          @RequestParam(required = false) BigDecimal feeRateMax,
+            @Parameter(description = "排序欄位（sn|productName|price|feeRate|purchaseQuantity|totalFee|totalAmount）")
+                                                                          @RequestParam(required = false) String sortBy,
+            @Parameter(description = "排序方向（asc|desc）")               @RequestParam(required = false) String sortDir,
+            @Parameter(description = "頁碼（1 起算）")                     @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每頁筆數（上限 200）")               @RequestParam(defaultValue = "10") int pageSize) {
+        LikeListQuery query = new LikeListQuery(
+                productName, account, amountMin, amountMax, feeRateMin, feeRateMax,
+                sortBy, sortDir, page, pageSize);
+        return ApiResponse.success(
+                PagedResponse.from(service.listByUserId(principal.getName(), query), LikeItemResponse::from));
     }
 
     @PutMapping("/{sn}")
