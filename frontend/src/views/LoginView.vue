@@ -2,7 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, DocumentCopy } from '@element-plus/icons-vue'
 import { login } from '../api/authApi.js'
 import { useAuthStore } from '../stores/auth.js'
 
@@ -20,6 +20,27 @@ const form = reactive({
 const rules = {
   userId: [{ required: true, message: '請輸入使用者 ID', trigger: 'blur' }],
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }],
+}
+
+async function copy(text, label) {
+  try {
+    // navigator.clipboard 僅在 https / localhost 可用；其餘情境 fallback
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success(`已複製${label}：${text}`)
+  } catch {
+    ElMessage.error('複製失敗')
+  }
 }
 
 async function onSubmit() {
@@ -85,8 +106,22 @@ async function onSubmit() {
       </el-form>
 
       <div class="hint">
-        <div>預設測試帳號：<code>A1236456789</code> / <code>B9876543210</code></div>
-        <div>密碼：<code>Test@1234</code></div>
+        <div class="hint-title">預設測試資料</div>
+        <div class="hint-row">
+          <span class="hint-label">帳號 A</span>
+          <code>A1236456789</code>
+          <el-button text size="small" :icon="DocumentCopy" @click="copy('A1236456789', '帳號')" />
+        </div>
+        <div class="hint-row">
+          <span class="hint-label">帳號 B</span>
+          <code>B9876543210</code>
+          <el-button text size="small" :icon="DocumentCopy" @click="copy('B9876543210', '帳號')" />
+        </div>
+        <div class="hint-row">
+          <span class="hint-label">密碼</span>
+          <code>Test@1234</code>
+          <el-button text size="small" :icon="DocumentCopy" @click="copy('Test@1234', '密碼')" />
+        </div>
       </div>
     </el-card>
   </div>
@@ -118,6 +153,18 @@ async function onSubmit() {
   color: #6b7280;
   margin-top: 8px;
   line-height: 1.6;
+}
+.hint-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.hint-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hint-label {
+  min-width: 44px;
 }
 .hint code {
   background: #f3f4f6;
