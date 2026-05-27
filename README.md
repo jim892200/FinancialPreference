@@ -54,10 +54,10 @@ docker compose up -d --build
 
 | 服務 | 網址 |
 |------|------|
-| 前端（SPA） | http://localhost:5173 |
-| REST API | http://localhost:8080/api/v1/likes |
-| Swagger UI | http://localhost:8080/swagger-ui/index.html |
-| Actuator Health | http://localhost:8080/actuator/health |
+| 前端（SPA） | <http://localhost:5173> |
+| REST API | <http://localhost:8080/api/v1/likes> |
+| Swagger UI | <http://localhost:8080/swagger-ui/index.html> |
+| Actuator Health | <http://localhost:8080/actuator/health> |
 
 ### 自訂 sa 密碼
 
@@ -83,6 +83,7 @@ docker compose up -d --build
 </table>
 
 或於專案根目錄新增 `.env` 檔（雙平台通用）：
+
 ```
 MSSQL_SA_PASSWORD=<你的密碼>
 ```
@@ -157,10 +158,10 @@ java -jar target/financial-preference-0.0.1-SNAPSHOT.jar
 
 | 服務 | 網址 |
 |------|------|
-| REST API | http://localhost:8080/api/v1/likes |
-| Swagger UI | http://localhost:8080/swagger-ui/index.html |
-| OpenAPI JSON | http://localhost:8080/v3/api-docs |
-| Actuator Health | http://localhost:8080/actuator/health |
+| REST API | <http://localhost:8080/api/v1/likes> |
+| Swagger UI | <http://localhost:8080/swagger-ui/index.html> |
+| OpenAPI JSON | <http://localhost:8080/v3/api-docs> |
+| Actuator Health | <http://localhost:8080/actuator/health> |
 
 ### 3. 啟動前端
 
@@ -170,7 +171,7 @@ npm install
 npm run dev
 ```
 
-開啟 http://localhost:5173 即可看到列表頁。Vite dev server 已設定 `/api/**` 反向代理至 `localhost:8080`。
+開啟 <http://localhost:5173> 即可看到列表頁。Vite dev server 已設定 `/api/**` 反向代理至 `localhost:8080`。
 
 ### 4. 正式打包
 
@@ -183,8 +184,6 @@ cd backend
 cd ../frontend
 npm run build
 ```
-
-> 指令採用分行撰寫以相容 Windows PowerShell 5.1（不支援 `&&` / `||`）；若使用 PowerShell 7+、bash 或 zsh，可改寫為 `cd backend && ./mvnw -DskipTests package` 串接。
 
 ---
 
@@ -300,6 +299,7 @@ FinancialPreference/
 ### 資料表
 
 #### `USER` 使用者資料表
+
 | 欄位 | 型別 | 說明 |
 |------|------|------|
 | `USER_ID` | VARCHAR(20) PK | 使用者 ID |
@@ -308,6 +308,7 @@ FinancialPreference/
 | `ACCOUNT` | VARCHAR(20) | 扣款帳號 |
 
 #### `PRODUCT` 產品資料表
+
 | 欄位 | 型別 | 說明 |
 |------|------|------|
 | `NO` | BIGINT PK (IDENTITY) | 產品流水號 |
@@ -316,6 +317,7 @@ FinancialPreference/
 | `FEE_RATE` | DECIMAL(5,4) | 手續費率（例：`0.0100` = 1%、`0.1000` = 10%） |
 
 #### `LIKE_LIST` 喜好清單資料表
+
 | 欄位 | 型別 | 說明 |
 |------|------|------|
 | `SN` | BIGINT PK (IDENTITY) | 流水序號 |
@@ -350,8 +352,8 @@ FinancialPreference/
 
 | USER_ID | USER_NAME | EMAIL |
 |---------|-----------|-------|
-| A1236456789 | 王o明 | test@email.com |
-| B9876543210 | 陳o華 | chen@example.com |
+| A1236456789 | 王o明 | <test@email.com> |
+| B9876543210 | 陳o華 | <chen@example.com> |
 
 A 使用者 2 筆喜好、B 使用者 1 筆。
 
@@ -362,6 +364,7 @@ A 使用者 2 筆喜好、B 使用者 1 筆。
 Base path: `/api/v1`
 
 統一回應殼：
+
 ```json
 { "code": "0000", "message": "success", "data": ... }
 ```
@@ -369,6 +372,7 @@ Base path: `/api/v1`
 ### 1. 新增喜好商品 `POST /api/v1/likes`
 
 請求：
+
 ```json
 {
   "userId": "A1236456789",
@@ -381,6 +385,7 @@ Base path: `/api/v1`
 ```
 
 回應（**HTTP 201**，`data` 為新增的 SN）：
+
 ```json
 { "code": "0000", "message": "success", "data": 7 }
 ```
@@ -388,6 +393,7 @@ Base path: `/api/v1`
 ### 2. 查詢喜好清單 `GET /api/v1/likes?userId={id}`
 
 回應（`data` 為扁平陣列）：
+
 ```json
 {
   "code": "0000",
@@ -430,7 +436,7 @@ Base path: `/api/v1`
 | `4041` | 404 | SN 不存在 |
 | `5000` | 500 | 未預期錯誤（不洩漏 stack trace） |
 
-完整 API 文件啟動後可於 http://localhost:8080/swagger-ui/index.html 互動式查看。
+完整 API 文件啟動後可於 <http://localhost:8080/swagger-ui/index.html> 互動式查看。
 
 ---
 
