@@ -1,0 +1,30 @@
+# MS SQL Server 2022 for the FinancialPreference assignment.
+# Usage:
+#   docker compose up -d
+#   docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -C \
+#     -Q "IF DB_ID(N'FinancialPreference') IS NULL CREATE DATABASE FinancialPreference;"
+# Then load DB/01–03 scripts (see README "快速開始（Docker）" section).
+
+services:
+  sql2022:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sql2022
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong@Passw0rd"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+volumes:
+  mssql-data:

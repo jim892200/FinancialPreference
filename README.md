@@ -7,7 +7,8 @@
 ## 目錄
 
 - [環境需求](#環境需求)
-- [安裝與執行](#安裝與執行)
+- [快速開始（Docker）](#快速開始docker)
+- [安裝與執行（手動）](#安裝與執行手動)
 - [功能需求](#功能需求)
 - [系統架構](#系統架構)
 - [技術棧](#技術棧)
@@ -15,44 +16,88 @@
 - [資料庫設計](#資料庫設計)
 - [API 規格](#api-規格)
 - [資安防護](#資安防護)
-- [測試](#測試)
+- [測試與覆蓋率](#測試與覆蓋率)
 
 ---
 
 ## 環境需求
 
-| 項目 | 版本 |
-|------|------|
-| JDK | 17 以上 |
-| Maven | 3.9 以上 |
-| Node.js | 18 以上 |
-| SQL Server | 2019 以上（或 SQL Server Express / Developer Edition） |
+| 項目 | 版本 | 備註 |
+|------|------|------|
+| JDK | 17 以上 | 後端編譯 / 執行 |
+| Maven | — | **內附 `mvnw` Wrapper，無需另裝** |
+| Node.js | 18 以上 | 前端 dev / build |
+| MS SQL Server | 2019 以上 | 或用 Docker（推薦） |
 
 ---
 
-## 安裝與執行
+## 快速開始（Docker）
+
+1 條指令起 MSSQL，3 條指令載入 schema / SP / seed：
+
+```powershell
+# 1. 啟動 MSSQL（在專案根目錄）
+docker compose up -d
+
+# 2. 等 ~15 秒 MSSQL 健康後，建立資料庫
+docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd `
+  -S localhost -U sa -P "YourStrong@Passw0rd" -C `
+  -Q "IF DB_ID(N'FinancialPreference') IS NULL CREATE DATABASE FinancialPreference;"
+
+# 3. 載入 schema / SP / seed
+docker cp DB sql2022:/tmp/DB
+docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -C -d FinancialPreference -i /tmp/DB/01_schema.sql
+docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -C -d FinancialPreference -i /tmp/DB/02_stored_procedures.sql
+docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -C -d FinancialPreference -i /tmp/DB/03_seed_data.sql
+```
+
+接著啟動後端與前端（見下方 [安裝與執行（手動）](#安裝與執行手動)），但**跳過資料庫初始化那一步**即可。
+
+---
+
+## 安裝與執行（手動）
 
 ### 1. 資料庫初始化
 
 於 SQL Server 中建立資料庫，並依序執行下列腳本：
 
 ```powershell
-sqlcmd -S localhost -d FinancialPreference -i DB/01_schema.sql
-sqlcmd -S localhost -d FinancialPreference -i DB/02_stored_procedures.sql
-sqlcmd -S localhost -d FinancialPreference -i DB/03_seed_data.sql
+sqlcmd -S localhost -U sa -P "<your-password>" -Q "IF DB_ID(N'FinancialPreference') IS NULL CREATE DATABASE FinancialPreference;"
+
+sqlcmd -S localhost -U sa -P "<your-password>" -d FinancialPreference -i DB/01_schema.sql
+sqlcmd -S localhost -U sa -P "<your-password>" -d FinancialPreference -i DB/02_stored_procedures.sql
+sqlcmd -S localhost -U sa -P "<your-password>" -d FinancialPreference -i DB/03_seed_data.sql
 ```
+
+詳細執行說明見 [`DB/README.md`](DB/README.md)。
 
 ### 2. 啟動後端
 
-調整 `backend/src/main/resources/application.yml` 中的資料庫連線資訊，然後執行：
+後端從 `MSSQL_PASSWORD` 環境變數讀取 sa 密碼（可避免硬編碼）：
+
+```powershell
+$env:MSSQL_PASSWORD = "YourStrong@Passw0rd"
+
+cd backend
+./mvnw spring-boot:run
+```
+
+或先打包再執行 jar：
 
 ```powershell
 cd backend
-mvn clean package
-mvn spring-boot:run
+./mvnw -DskipTests package
+java -jar target/financial-preference-0.0.1-SNAPSHOT.jar
 ```
 
-後端服務預設於 `http://localhost:8080` 提供 API。
+後端服務：
+
+| 服務 | 網址 |
+|------|------|
+| REST API | http://localhost:8080/api/v1/likes |
+| Swagger UI | http://localhost:8080/swagger-ui/index.html |
+| OpenAPI JSON | http://localhost:8080/v3/api-docs |
+| Actuator Health | http://localhost:8080/actuator/health |
 
 ### 3. 啟動前端
 
@@ -62,15 +107,15 @@ npm install
 npm run dev
 ```
 
-前端開發模式預設於 `http://localhost:5173` 提供。
+開啟 http://localhost:5173 即可看到列表頁。Vite dev server 已設定 `/api/**` 反向代理至 `localhost:8080`。
 
 ### 4. 正式打包
 
 ```powershell
 # 後端：產出可執行 jar
-cd backend && mvn clean package
+cd backend && ./mvnw -DskipTests package
 
-# 前端：產出靜態檔
+# 前端：產出靜態檔（給 Nginx 之類的 Web Server）
 cd frontend && npm run build
 ```
 
@@ -82,8 +127,8 @@ cd frontend && npm run build
 |---|------|------|
 | 1 | 新增喜好金融商品 | 紀錄產品名稱、產品價格、手續費率、扣款帳號、購買數量 |
 | 2 | 查詢喜好金融商品清單 | 顯示產品名稱清單、預計扣款總金額、總手續費用、扣款帳號、使用者聯絡電子信箱 |
-| 3 | 刪除喜好金融商品 | 刪除指定的喜好紀錄 |
-| 4 | 更改喜好金融商品 | 更新產品名稱、產品價格、手續費率、扣款帳號、購買數量 |
+| 3 | 刪除喜好金融商品 | 刪除指定的喜好紀錄與對應產品 |
+| 4 | 更改喜好金融商品 | 更新產品名稱、產品價格、手續費率、扣款帳號、購買數量，並重算金額 |
 
 ---
 
@@ -104,8 +149,8 @@ cd frontend && npm run build
 | 分層 | 套件 | 職責 |
 |------|------|------|
 | 展示層 (Presentation) | `presentation/` | Controller、DTO、輸入驗證、全域例外處理 |
-| 業務層 (Business) | `business/` | Service、Domain Model、交易管理、費用計算 |
-| 資料層 (Data) | `data/` | Repository、Stored Procedure 呼叫、RowMapper |
+| 業務層 (Business) | `business/` | Service、Domain Model、Command、交易管理、費用計算 |
+| 資料層 (Data) | `data/` | Repository（SimpleJdbcCall）、RowMapper |
 | 共用層 (Common) | `common/` | 設定、共用工具、資安過濾器、例外定義 |
 
 ---
@@ -114,15 +159,17 @@ cd frontend && npm run build
 
 | 類別 | 技術 |
 |------|------|
-| 前端 | Vue.js 3 + Vite + Axios |
-| 後端框架 | Spring Boot 3.x (Java 17) |
-| 建置工具 | Maven |
-| 資料庫 | Microsoft SQL Server |
-| 資料庫存取 | Stored Procedure (透過 `SimpleJdbcCall` / `JdbcTemplate`) |
+| 前端 | Vue.js 3.5 + Vite 8 + Axios + vue-router 4 |
+| 後端框架 | Spring Boot 3.5.0（Java 17） |
+| 建置工具 | Maven（內附 mvnw Wrapper） |
+| 資料庫 | Microsoft SQL Server 2022 |
+| 資料庫存取 | Stored Procedure（透過 `SimpleJdbcCall` 具名參數綁定） |
 | API 風格 | RESTful (JSON) |
-| 驗證 | Jakarta Bean Validation |
-| API 文件 | springdoc-openapi (Swagger UI) |
+| 驗證 | Jakarta Bean Validation（Hibernate Validator） |
+| 資安 | OWASP Java HTML Sanitizer + Jackson 自訂反序列化器 |
+| API 文件 | springdoc-openapi 2.8（OpenAPI 3.1） |
 | 測試 | JUnit 5 + Mockito + Spring Boot Test |
+| 覆蓋率 | JaCoCo 0.8 |
 
 ---
 
@@ -132,47 +179,51 @@ cd frontend && npm run build
 FinancialPreference/
 ├── README.md
 ├── .gitignore
+├── docker-compose.yml                  # MSSQL 一鍵起
 │
-├── backend/                              # Spring Boot 應用
+├── backend/                            # Spring Boot 應用
 │   ├── pom.xml
+│   ├── mvnw / mvnw.cmd                 # Maven Wrapper
 │   └── src/
 │       ├── main/
 │       │   ├── java/com/esunbank/financialpreference/
-│       │   │   ├── presentation/         # 展示層
-│       │   │   │   ├── controller/
-│       │   │   │   ├── dto/
-│       │   │   │   └── advice/
-│       │   │   ├── business/             # 業務層
-│       │   │   │   ├── service/
-│       │   │   │   ├── domain/
-│       │   │   │   └── calculator/
-│       │   │   ├── data/                 # 資料層
-│       │   │   │   ├── repository/
-│       │   │   │   └── mapper/
-│       │   │   └── common/               # 共用層
-│       │   │       ├── config/
-│       │   │       ├── security/
-│       │   │       ├── exception/
-│       │   │       └── util/
+│       │   │   ├── presentation/       # 展示層
+│       │   │   │   ├── controller/     #   LikeListController
+│       │   │   │   ├── dto/            #   ApiResponse / request / response
+│       │   │   │   └── advice/         #   GlobalExceptionHandler
+│       │   │   ├── business/           # 業務層
+│       │   │   │   ├── service/        #   LikeListService (@Transactional)
+│       │   │   │   ├── command/        #   CreateLikeCommand / UpdateLikeCommand
+│       │   │   │   ├── domain/         #   User / Product / LikeItem
+│       │   │   │   └── calculator/     #   FeeCalculator
+│       │   │   ├── data/               # 資料層
+│       │   │   │   ├── repository/     #   LikeListRepository (SimpleJdbcCall)
+│       │   │   │   └── mapper/         #   LikeItemRowMapper
+│       │   │   └── common/             # 共用層
+│       │   │       ├── config/         #   WebMvcConfig / OpenApiConfig / JacksonXssConfig
+│       │   │       ├── security/       #   HtmlSanitizer / SanitizingRequestWrapper / XssRequestFilter
+│       │   │       ├── exception/      #   ErrorCode / BusinessException
+│       │   │       └── util/           #   MoneyUtil / Constants
 │       │   └── resources/
-│       │       └── application.yml
-│       └── test/java/...
+│       │       ├── application.yml
+│       │       └── application-dev.yml
+│       └── test/java/...               # 47 個測試
 │
-├── frontend/                             # Vue.js 應用
+├── frontend/                           # Vue.js 應用
 │   ├── package.json
-│   ├── vite.config.js
+│   ├── vite.config.js                  # /api 反向代理至 :8080
 │   └── src/
-│       ├── api/
-│       ├── views/
-│       ├── components/
-│       ├── router/
-│       └── stores/
+│       ├── api/likeListApi.js          # axios 封裝
+│       ├── views/                      # LikeListView / LikeFormView
+│       ├── router/index.js
+│       ├── App.vue
+│       └── main.js
 │
-└── DB/                                   # 資料庫腳本
-    ├── 01_schema.sql                     # DDL
-    ├── 02_stored_procedures.sql          # Stored Procedures
-    ├── 03_seed_data.sql                  # DML 範例資料
-    └── README.md                         # 執行順序說明
+└── DB/                                 # 資料庫腳本
+    ├── 01_schema.sql                   # DDL（含 FK / CHECK）
+    ├── 02_stored_procedures.sql        # 4 支 SP
+    ├── 03_seed_data.sql                # DML 範例資料（2 USER / 3 PRODUCT / 3 LIKE）
+    └── README.md                       # 執行方式（sqlcmd / docker exec / SSMS）
 ```
 
 ---
@@ -189,23 +240,13 @@ FinancialPreference/
 | `EMAIL` | VARCHAR(100) | 電子郵件 |
 | `ACCOUNT` | VARCHAR(20) | 扣款帳號 |
 
-範例資料：
-```json
-{
-  "UserID": "A1236456789",
-  "UserName": "王o明",
-  "Email": "test@email.com",
-  "Account": "1111999666"
-}
-```
-
 #### `PRODUCT` 產品資料表
 | 欄位 | 型別 | 說明 |
 |------|------|------|
 | `NO` | BIGINT PK (IDENTITY) | 產品流水號 |
 | `PRODUCT_NAME` | NVARCHAR(100) | 產品名稱 |
 | `PRICE` | DECIMAL(18,2) | 產品價格 |
-| `FEE_RATE` | DECIMAL(5,4) | 手續費率（例：`0.1` = 10%、`0.01` = 1%） |
+| `FEE_RATE` | DECIMAL(5,4) | 手續費率（例：`0.0100` = 1%、`0.1000` = 10%） |
 
 #### `LIKE_LIST` 喜好清單資料表
 | 欄位 | 型別 | 說明 |
@@ -213,7 +254,7 @@ FinancialPreference/
 | `SN` | BIGINT PK (IDENTITY) | 流水序號 |
 | `USER_ID` | VARCHAR(20) FK → `USER.USER_ID` | 使用者外鍵 |
 | `PRODUCT_NO` | BIGINT FK → `PRODUCT.NO` | 產品外鍵 |
-| `PURCHASE_QUANTITY` | INT | 購買數量 |
+| `PURCHASE_QUANTITY` | INT | 購買數量（> 0） |
 | `ACCOUNT` | VARCHAR(20) | 扣款帳號（下單當下的快照） |
 | `TOTAL_FEE` | DECIMAL(18,2) | 總手續費 (TWD) |
 | `TOTAL_AMOUNT` | DECIMAL(18,2) | 預計扣款總金額 |
@@ -222,21 +263,30 @@ FinancialPreference/
 
 | 欄位 | 公式 |
 |------|------|
-| `TOTAL_AMOUNT` | `PRICE × PURCHASE_QUANTITY × (1 + FEE_RATE)` |
-| `TOTAL_FEE` | `PRICE × PURCHASE_QUANTITY × FEE_RATE` |
+| `TOTAL_FEE` | `PRICE × FEE_RATE × PURCHASE_QUANTITY` |
+| `TOTAL_AMOUNT` | `PRICE × PURCHASE_QUANTITY + TOTAL_FEE` |
 
 > 金額一律以 `DECIMAL(18,2)` 儲存，Java 端使用 `BigDecimal` 處理，避免浮點誤差。
 
 ### Stored Procedure 一覽
 
-| SP 名稱 | 用途 |
-|---------|------|
-| `SP_LIKE_INSERT` | 新增喜好（同步 INSERT PRODUCT + LIKE_LIST） |
-| `SP_LIKE_QUERY_BY_USER` | 依 UserID 查詢清單（三表 JOIN） |
-| `SP_LIKE_UPDATE` | 更新喜好商品與數量，重算金額 |
-| `SP_LIKE_DELETE` | 刪除喜好（同步 DELETE PRODUCT + LIKE_LIST） |
+| SP 名稱 | 用途 | 涉及資料表 |
+|---------|------|----------|
+| `SP_LIKE_INSERT` | 新增喜好（INSERT PRODUCT 取 SCOPE_IDENTITY 後 INSERT LIKE_LIST） | PRODUCT、LIKE_LIST |
+| `SP_LIKE_QUERY_BY_USER` | 依 UserID 查詢清單（三表 JOIN） | USER、PRODUCT、LIKE_LIST |
+| `SP_LIKE_UPDATE` | 更新產品與數量，重算金額 | PRODUCT、LIKE_LIST |
+| `SP_LIKE_DELETE` | 刪除喜好（先 LIKE_LIST 再 PRODUCT，FK 順序） | PRODUCT、LIKE_LIST |
 
-涉及多表異動的 SP 內部使用 `BEGIN TRAN / COMMIT / ROLLBACK`，Java Service 層再以 `@Transactional` 包覆，雙重保障資料一致性。
+所有 SP 均以**具名參數**呼叫；跨表異動的 SP 內部含 `BEGIN TRY / BEGIN TRAN / COMMIT / ROLLBACK / THROW`，Java Service 層再以 `@Transactional(rollbackFor = Exception.class)` 包覆，**雙重保障**資料一致性。
+
+### 預設 Seed 資料
+
+| USER_ID | USER_NAME | EMAIL |
+|---------|-----------|-------|
+| A1236456789 | 王o明 | test@email.com |
+| B9876543210 | 陳o華 | chen@example.com |
+
+A 使用者 2 筆喜好、B 使用者 1 筆。
 
 ---
 
@@ -244,84 +294,124 @@ FinancialPreference/
 
 Base path: `/api/v1`
 
-### 1. 新增喜好商品
+統一回應殼：
+```json
+{ "code": "0000", "message": "success", "data": ... }
 ```
-POST /api/v1/likes
-Content-Type: application/json
 
+### 1. 新增喜好商品 `POST /api/v1/likes`
+
+請求：
+```json
 {
   "userId": "A1236456789",
   "productName": "玉山美元定存",
   "price": 1000.00,
-  "feeRate": 0.01,
-  "account": "1111999666",
-  "purchaseQuantity": 5
+  "feeRate": 0.0100,
+  "purchaseQuantity": 5,
+  "account": "1111999666"
 }
 ```
 
-### 2. 查詢喜好清單
-```
-GET /api/v1/likes?userId=A1236456789
+回應（**HTTP 201**，`data` 為新增的 SN）：
+```json
+{ "code": "0000", "message": "success", "data": 7 }
 ```
 
-回應：
+### 2. 查詢喜好清單 `GET /api/v1/likes?userId={id}`
+
+回應（`data` 為扁平陣列）：
 ```json
 {
   "code": "0000",
   "message": "success",
-  "data": {
-    "userName": "王o明",
-    "email": "test@email.com",
-    "account": "1111999666",
-    "totalAmount": 5050.00,
-    "totalFee": 50.00,
-    "items": [
-      {
-        "sn": 1,
-        "productName": "玉山美元定存",
-        "price": 1000.00,
-        "feeRate": 0.01,
-        "purchaseQuantity": 5
-      }
-    ]
-  }
+  "data": [
+    {
+      "sn": 2,
+      "userId": "A1236456789",
+      "userName": "王o明",
+      "email": "test@email.com",
+      "productNo": 2,
+      "productName": "玉山日圓基金",
+      "price": 500.00,
+      "feeRate": 0.0150,
+      "purchaseQuantity": 10,
+      "account": "1111999666",
+      "totalFee": 75.00,
+      "totalAmount": 5075.00
+    }
+  ]
 }
 ```
 
-### 3. 更新喜好商品
-```
-PUT /api/v1/likes/{sn}
-```
+### 3. 更新喜好商品 `PUT /api/v1/likes/{sn}`
 
-### 4. 刪除喜好商品
-```
-DELETE /api/v1/likes/{sn}
-```
+請求同 POST，但**不含 `userId`**（不可改）。回應 `data: null`。
 
-完整 API 文件啟動後可於 `http://localhost:8080/swagger-ui.html` 檢視。
+### 4. 刪除喜好商品 `DELETE /api/v1/likes/{sn}`
+
+無 body。回應 `data: null`。
+
+### 錯誤碼
+
+| code | HTTP | 觸發情境 |
+|------|------|----------|
+| `0000` | 200 / 201 | 成功 |
+| `4000` | 400 | Bean Validation 失敗（空字串、超長、負數、quantity = 0…） |
+| `4001` | 400 | quantity 不合法 |
+| `4040` | 404 | USER_ID 不存在 |
+| `4041` | 404 | SN 不存在 |
+| `5000` | 500 | 未預期錯誤（不洩漏 stack trace） |
+
+完整 API 文件啟動後可於 http://localhost:8080/swagger-ui/index.html 互動式查看。
 
 ---
 
 ## 資安防護
 
-| 威脅 | 對策 |
-|------|------|
-| SQL Injection | 全面採用 Stored Procedure + 具名參數綁定（`SimpleJdbcCall`），禁用任何字串拼接 SQL |
-| XSS | 後端 `XssRequestFilter` 攔截 Request，對輸入字串使用 OWASP Java HTML Sanitizer 清洗；前端 Vue 預設 escape，禁用 `v-html` |
-| 過量／格式異常輸入 | Jakarta Bean Validation：`@NotBlank`、`@Size`、`@DecimalMin`、`@Pattern` |
-| 錯誤訊息洩漏 | `GlobalExceptionHandler` 統一包裝，僅回傳定義過的錯誤碼與訊息 |
+| 威脅 | 對策 | 實作 |
+|------|------|------|
+| **SQL Injection** | 全面採用 Stored Procedure + 具名參數綁定，禁用任何字串拼接 SQL | `SimpleJdbcCall` + `MapSqlParameterSource.addValue(name, value, Types.X)` → JDBC PreparedStatement `?` 佔位符 |
+| **XSS（JSON body）** | OWASP Java HTML Sanitizer 在反序列化階段清洗 String 欄位 | `JacksonXssConfig` 註冊全域 String `JsonDeserializer` |
+| **XSS（query / form）** | HttpServletRequestWrapper 清洗所有參數 | `XssRequestFilter` + `SanitizingRequestWrapper` |
+| **過量／格式異常輸入** | Jakarta Bean Validation | `@NotBlank` / `@Size` / `@DecimalMin` / `@DecimalMax` / `@Digits` / `@Min` |
+| **錯誤訊息洩漏** | 統一例外處理 + 隱藏 stack trace | `GlobalExceptionHandler` + `server.error.include-stacktrace: never` |
+| **DB 密碼硬編碼** | 環境變數注入 | `MSSQL_PASSWORD` env，未提供時連線失敗 |
+
+> XSS 清洗發生在 **Bean Validation 之前**，所以 `productName = "<script>alert(1)</script>"` 會先清洗為空字串，再被 `@NotBlank` 擋下回 400，根本不會進入 Service。
 
 ---
 
-## 測試
+## 測試與覆蓋率
 
 ```powershell
-# 後端單元測試與整合測試
 cd backend
-mvn test
+./mvnw test
 ```
 
-測試涵蓋：
-- 業務層：費用計算 (`FeeCalculator`)、Service 流程
-- 資料層：Stored Procedure 呼叫
-- 展示層：Controller HTTP 流程、輸入驗證
+執行結果：
+
+| 測試類 | 個數 | 範圍 |
+|--------|------|------|
+| `MoneyUtilTest` | 5 | BigDecimal 精度與進位 |
+| `HtmlSanitizerTest` | 7 | XSS 清洗策略 |
+| `SanitizingRequestWrapperTest` | 5 | Query/Form param 清洗 |
+| `FeeCalculatorTest` | 4 | 金額重算公式 |
+| `LikeListServiceTest` | 7 | Service + SP 錯誤碼轉譯 |
+| `LikeListControllerTest` | 12 | 4 endpoints × happy / 驗證 / 業務錯誤 |
+| `XssIntegrationTest` | 3 | End-to-end XSS 攔截 |
+| `LikeListRepositoryIntegrationTest` | 3 | 對真 DB round-trip |
+| `FinancialPreferenceApplicationTests` | 1 | Spring context load |
+| **小計** | **47** | |
+
+> Repository 集成測試以 `@EnabledIfEnvironmentVariable(MSSQL_PASSWORD)` 控管 — 未設定密碼時自動 skip，方便無 DB 環境 build。
+
+### JaCoCo 覆蓋率
+
+| 指標 | 比例 |
+|------|------|
+| Instruction | 92.1% |
+| Line | 92.6% |
+| Branch | 70.0% |
+
+報告位置：`backend/target/site/jacoco/index.html`（執行 `./mvnw test` 後產生）。
