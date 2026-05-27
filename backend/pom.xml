@@ -15,7 +15,7 @@
     <artifactId>financial-preference</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>financial-preference</name>
-    <description>玉山銀行後端工程師實作題 — 金融商品喜好紀錄系統</description>
+    <description>金融商品喜好紀錄系統 — Financial Preference Management</description>
 
     <properties>
         <java.version>17</java.version>

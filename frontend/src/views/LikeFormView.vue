@@ -1,6 +1,8 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { ArrowLeft, Check } from '@element-plus/icons-vue'
 import { createLike, updateLike, SEED_USERS } from '../api/likeListApi.js'
 
 const props = defineProps({
@@ -10,40 +12,86 @@ const props = defineProps({
 
 const route = useRoute()
 const router = useRouter()
+const formRef = ref(null)
 const submitting = ref(false)
-const error = ref('')
 
 const form = reactive({
   userId: SEED_USERS[0].id,
   productName: '',
-  price: '',
-  feeRate: '',
+  price: null,
+  feeRate: null,
   purchaseQuantity: 1,
   account: '',
 })
+
+const rules = {
+  userId: [{ required: true, message: '請選擇使用者', trigger: 'change' }],
+  productName: [
+    { required: true, message: '請輸入產品名稱', trigger: 'blur' },
+    { max: 100, message: '產品名稱不可超過 100 字', trigger: 'blur' },
+  ],
+  price: [
+    { required: true, message: '請輸入產品價格', trigger: 'blur' },
+    {
+      validator: (_, value, cb) => {
+        if (value === null || value === undefined || value === '') return cb(new Error('請輸入產品價格'))
+        if (Number(value) < 0) return cb(new Error('價格不可為負'))
+        cb()
+      },
+      trigger: 'blur',
+    },
+  ],
+  feeRate: [
+    { required: true, message: '請輸入手續費率', trigger: 'blur' },
+    {
+      validator: (_, value, cb) => {
+        if (value === null || value === undefined || value === '') return cb(new Error('請輸入手續費率'))
+        const num = Number(value)
+        if (num < 0 || num > 1) return cb(new Error('費率必須介於 0 ~ 1（例如 0.01 = 1%）'))
+        cb()
+      },
+      trigger: 'blur',
+    },
+  ],
+  purchaseQuantity: [
+    { required: true, message: '請輸入購買數量', trigger: 'blur' },
+    {
+      validator: (_, value, cb) => {
+        if (!Number.isInteger(Number(value)) || Number(value) < 1)
+          return cb(new Error('購買數量需為正整數'))
+        cb()
+      },
+      trigger: 'blur',
+    },
+  ],
+  account: [
+    { required: true, message: '請輸入扣款帳號', trigger: 'blur' },
+    { max: 20, message: '帳號不可超過 20 字', trigger: 'blur' },
+  ],
+}
 
 onMounted(() => {
   if (props.mode === 'create') {
     if (route.query.userId) form.userId = route.query.userId
     return
   }
-  // edit mode：從 router state 帶過來的 item
   const stateItem = window.history.state?.item
   if (stateItem) {
     form.userId = stateItem.userId
     form.productName = stateItem.productName
-    form.price = stateItem.price
-    form.feeRate = stateItem.feeRate
-    form.purchaseQuantity = stateItem.purchaseQuantity
+    form.price = Number(stateItem.price)
+    form.feeRate = Number(stateItem.feeRate)
+    form.purchaseQuantity = Number(stateItem.purchaseQuantity)
     form.account = stateItem.account
   } else {
-    error.value = '找不到原始資料，請從列表進入編輯。'
+    ElMessage.warning('找不到原始資料，請從列表進入編輯。')
   }
 })
 
 async function onSubmit() {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
   submitting.value = true
-  error.value = ''
   try {
     if (props.mode === 'create') {
       await createLike({
@@ -54,6 +102,7 @@ async function onSubmit() {
         purchaseQuantity: Number(form.purchaseQuantity),
         account: form.account,
       })
+      ElMessage.success('新增成功')
     } else {
       await updateLike(props.sn, {
         productName: form.productName,
@@ -62,77 +111,122 @@ async function onSubmit() {
         purchaseQuantity: Number(form.purchaseQuantity),
         account: form.account,
       })
+      ElMessage.success('更新成功')
     }
     router.push({ name: 'list' })
   } catch (err) {
-    error.value = err.apiMessage || '送出失敗'
+    ElMessage.error(err.apiMessage || '送出失敗')
   } finally {
     submitting.value = false
   }
 }
 
-function onCancel() { router.push({ name: 'list' }) }
+function onCancel() {
+  router.push({ name: 'list' })
+}
 </script>
 
 <template>
-  <section class="like-form">
-    <h1>{{ mode === 'create' ? '新增喜好商品' : `編輯喜好商品 #${sn}` }}</h1>
-
-    <p v-if="error" class="error">{{ error }}</p>
-
-    <form @submit.prevent="onSubmit">
-      <label v-if="mode === 'create'">
-        使用者 ID
-        <select v-model="form.userId">
-          <option v-for="u in SEED_USERS" :key="u.id" :value="u.id">
-            {{ u.id }}（{{ u.name }}）
-          </option>
-        </select>
-      </label>
-
-      <label>
-        產品名稱
-        <input v-model="form.productName" required maxlength="100" />
-      </label>
-
-      <label>
-        產品價格
-        <input v-model="form.price" type="number" step="0.01" min="0" required />
-      </label>
-
-      <label>
-        手續費率（0–1，例：0.01 = 1%）
-        <input v-model="form.feeRate" type="number" step="0.0001" min="0" max="1" required />
-      </label>
-
-      <label>
-        購買數量
-        <input v-model="form.purchaseQuantity" type="number" step="1" min="1" required />
-      </label>
-
-      <label>
-        扣款帳號
-        <input v-model="form.account" required maxlength="20" />
-      </label>
-
-      <div class="actions">
-        <button type="submit" :disabled="submitting" class="primary">
-          {{ submitting ? '送出中…' : '送出' }}
-        </button>
-        <button type="button" @click="onCancel">取消</button>
+  <el-card shadow="never" class="form-card">
+    <template #header>
+      <div class="card-header">
+        <el-button :icon="ArrowLeft" link @click="onCancel">返回</el-button>
+        <span class="card-title">
+          {{ mode === 'create' ? '新增喜好商品' : `編輯喜好商品 #${sn}` }}
+        </span>
       </div>
-    </form>
-  </section>
+    </template>
+
+    <el-form
+      ref="formRef"
+      :model="form"
+      :rules="rules"
+      label-width="120px"
+      label-position="right"
+    >
+      <el-form-item label="使用者" prop="userId" v-if="mode === 'create'">
+        <el-select v-model="form.userId" style="width: 100%">
+          <el-option
+            v-for="u in SEED_USERS"
+            :key="u.id"
+            :label="`${u.id}（${u.name}）`"
+            :value="u.id"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="產品名稱" prop="productName">
+        <el-input v-model="form.productName" maxlength="100" show-word-limit placeholder="例：美元定存" />
+      </el-form-item>
+
+      <el-form-item label="產品價格" prop="price">
+        <el-input-number
+          v-model="form.price"
+          :min="0"
+          :step="0.01"
+          :precision="2"
+          controls-position="right"
+          style="width: 100%"
+        />
+      </el-form-item>
+
+      <el-form-item label="手續費率" prop="feeRate">
+        <el-input-number
+          v-model="form.feeRate"
+          :min="0"
+          :max="1"
+          :step="0.0001"
+          :precision="4"
+          controls-position="right"
+          style="width: 100%"
+        />
+        <div class="hint-text">0 ~ 1 之間（例：0.01 = 1%）</div>
+      </el-form-item>
+
+      <el-form-item label="購買數量" prop="purchaseQuantity">
+        <el-input-number
+          v-model="form.purchaseQuantity"
+          :min="1"
+          :step="1"
+          :precision="0"
+          controls-position="right"
+          style="width: 100%"
+        />
+      </el-form-item>
+
+      <el-form-item label="扣款帳號" prop="account">
+        <el-input v-model="form.account" maxlength="20" show-word-limit placeholder="例：1111999666" />
+      </el-form-item>
+
+      <el-form-item>
+        <el-button type="primary" :icon="Check" :loading="submitting" @click="onSubmit">
+          {{ mode === 'create' ? '送出' : '更新' }}
+        </el-button>
+        <el-button @click="onCancel">取消</el-button>
+      </el-form-item>
+    </el-form>
+  </el-card>
 </template>
 
 <style scoped>
-.like-form { max-width: 600px; margin: 0 auto; padding: 24px; }
-h1 { font-size: 1.5rem; margin-bottom: 16px; }
-form { display: flex; flex-direction: column; gap: 12px; }
-label { display: flex; flex-direction: column; gap: 4px; font-weight: 500; }
-input, select { padding: 8px 10px; font: inherit; border: 1px solid #d1d5db; border-radius: 4px; }
-.actions { display: flex; gap: 10px; margin-top: 12px; }
-button { padding: 8px 16px; cursor: pointer; }
-button.primary { background: #0a7; color: white; border: none; border-radius: 4px; }
-.error { color: #c00; padding: 8px 12px; background: #fee; border-radius: 4px; margin-bottom: 12px; }
+.form-card {
+  max-width: 720px;
+  margin: 0 auto;
+  border-radius: 8px;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+.hint-text {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
 </style>

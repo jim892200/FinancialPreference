@@ -342,7 +342,7 @@ Base path: `/api/v1`
 ```json
 {
   "userId": "A1236456789",
-  "productName": "玉山美元定存",
+  "productName": "美元定存",
   "price": 1000.00,
   "feeRate": 0.0100,
   "purchaseQuantity": 5,
@@ -369,7 +369,7 @@ Base path: `/api/v1`
       "userName": "王o明",
       "email": "test@email.com",
       "productNo": 2,
-      "productName": "玉山日圓基金",
+      "productName": "日圓基金",
       "price": 500.00,
       "feeRate": 0.0150,
       "purchaseQuantity": 10,

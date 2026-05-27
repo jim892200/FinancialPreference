@@ -67,7 +67,7 @@ docker exec -i sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$env
 DECLARE @NEW_SN BIGINT;
 EXEC dbo.SP_LIKE_INSERT
     @USER_ID           = N'A1236456789',
-    @PRODUCT_NAME      = N'玉山歐元定存',
+    @PRODUCT_NAME      = N'歐元定存',
     @PRICE             = 800.00,
     @FEE_RATE          = 0.0120,
     @PURCHASE_QUANTITY = 4,
