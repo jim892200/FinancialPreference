@@ -7,11 +7,16 @@ import com.esunbank.financialpreference.presentation.advice.GlobalExceptionHandl
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.security.Principal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -22,21 +27,26 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(LikeListController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @Import({GlobalExceptionHandler.class, JacksonXssConfig.class})
 class XssIntegrationTest {
 
+    private static final String USER_A = "A1236456789";
+
     @Autowired MockMvc mvc;
     @MockitoBean LikeListService service;
+
+    private static Principal authAs(String userId) {
+        return new UsernamePasswordAuthenticationToken(userId, null, List.of());
+    }
 
     @Test
     void postBody_scriptTagInProductName_sanitizedBeforeService() throws Exception {
         when(service.create(any())).thenReturn(99L);
 
-        // <b>bold</b>name -> "boldname"（HTML 標籤剝除、純文字保留）
         String body = """
                 {
-                  "userId": "A1236456789",
-                  "productName": "<b>玉山</b>美元定存",
+                  "productName": "<b>美元</b>定存",
                   "price": 100.00,
                   "feeRate": 0.0100,
                   "purchaseQuantity": 1,
@@ -45,20 +55,20 @@ class XssIntegrationTest {
                 """;
 
         mvc.perform(post("/api/v1/likes")
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         ArgumentCaptor<CreateLikeCommand> captor = ArgumentCaptor.forClass(CreateLikeCommand.class);
         verify(service).create(captor.capture());
-        assertEquals("玉山美元定存", captor.getValue().productName());
+        assertEquals("美元定存", captor.getValue().productName());
     }
 
     @Test
     void postBody_pureScriptTag_sanitizesToEmpty_then400Validation() throws Exception {
         String body = """
                 {
-                  "userId": "A1236456789",
                   "productName": "<script>alert(1)</script>",
                   "price": 100.00,
                   "feeRate": 0.0100,
@@ -68,6 +78,7 @@ class XssIntegrationTest {
                 """;
 
         mvc.perform(post("/api/v1/likes")
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest());
@@ -81,7 +92,6 @@ class XssIntegrationTest {
 
         String body = """
                 {
-                  "userId": "A1236456789",
                   "productName": "p",
                   "price": 1.00,
                   "feeRate": 0.01,
@@ -91,6 +101,7 @@ class XssIntegrationTest {
                 """;
 
         mvc.perform(post("/api/v1/likes")
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());

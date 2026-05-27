@@ -12,14 +12,13 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-@Schema(description = "新增喜好商品請求")
+/**
+ * 新增喜好商品請求。userId 由 JWT subject 取得，不接受 body 內傳入（避免代他人下單）。
+ */
+@Schema(description = "新增喜好商品請求（userId 由 JWT 決定）")
 public record CreateLikeRequest(
 
-        @Schema(description = "使用者 ID", example = "A1236456789", maxLength = 20)
-        @NotBlank @Size(max = 20)
-        String userId,
-
-        @Schema(description = "金融商品名稱", example = "玉山美元定存", maxLength = 100)
+        @Schema(description = "金融商品名稱", example = "美元定存", maxLength = 100)
         @NotBlank @Size(max = 100)
         String productName,
 
@@ -44,7 +43,7 @@ public record CreateLikeRequest(
         @NotBlank @Size(max = 20)
         String account
 ) {
-    public CreateLikeCommand toCommand() {
+    public CreateLikeCommand toCommand(String userId) {
         return new CreateLikeCommand(userId, productName, price, feeRate, purchaseQuantity, account);
     }
 }

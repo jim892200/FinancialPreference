@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 public record UpdateLikeCommand(
         long sn,
+        String userId,
         String productName,
         BigDecimal price,
         BigDecimal feeRate,

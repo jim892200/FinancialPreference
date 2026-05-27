@@ -26,3 +26,7 @@ springdoc:
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  jwt:
+    # 32+ 字元 HMAC-SHA256 secret。請務必以環境變數 APP_JWT_SECRET 覆寫，勿用以下開發用值上線。
+    secret: ${APP_JWT_SECRET:dev-only-secret-please-override-32+chars}
+    ttl-minutes: ${APP_JWT_TTL_MINUTES:60}

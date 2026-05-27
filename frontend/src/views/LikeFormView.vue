@@ -1,22 +1,20 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Check } from '@element-plus/icons-vue'
-import { createLike, updateLike, SEED_USERS } from '../api/likeListApi.js'
+import { createLike, updateLike } from '../api/likeListApi.js'
 
 const props = defineProps({
   mode: { type: String, required: true },   // 'create' | 'edit'
   sn:   { type: Number, default: null },
 })
 
-const route = useRoute()
 const router = useRouter()
 const formRef = ref(null)
 const submitting = ref(false)
 
 const form = reactive({
-  userId: SEED_USERS[0].id,
   productName: '',
   price: null,
   feeRate: null,
@@ -25,7 +23,6 @@ const form = reactive({
 })
 
 const rules = {
-  userId: [{ required: true, message: '請選擇使用者', trigger: 'change' }],
   productName: [
     { required: true, message: '請輸入產品名稱', trigger: 'blur' },
     { max: 100, message: '產品名稱不可超過 100 字', trigger: 'blur' },
@@ -71,13 +68,9 @@ const rules = {
 }
 
 onMounted(() => {
-  if (props.mode === 'create') {
-    if (route.query.userId) form.userId = route.query.userId
-    return
-  }
+  if (props.mode === 'create') return
   const stateItem = window.history.state?.item
   if (stateItem) {
-    form.userId = stateItem.userId
     form.productName = stateItem.productName
     form.price = Number(stateItem.price)
     form.feeRate = Number(stateItem.feeRate)
@@ -93,24 +86,18 @@ async function onSubmit() {
   if (!valid) return
   submitting.value = true
   try {
+    const payload = {
+      productName: form.productName,
+      price: Number(form.price),
+      feeRate: Number(form.feeRate),
+      purchaseQuantity: Number(form.purchaseQuantity),
+      account: form.account,
+    }
     if (props.mode === 'create') {
-      await createLike({
-        userId: form.userId,
-        productName: form.productName,
-        price: Number(form.price),
-        feeRate: Number(form.feeRate),
-        purchaseQuantity: Number(form.purchaseQuantity),
-        account: form.account,
-      })
+      await createLike(payload)
       ElMessage.success('新增成功')
     } else {
-      await updateLike(props.sn, {
-        productName: form.productName,
-        price: Number(form.price),
-        feeRate: Number(form.feeRate),
-        purchaseQuantity: Number(form.purchaseQuantity),
-        account: form.account,
-      })
+      await updateLike(props.sn, payload)
       ElMessage.success('更新成功')
     }
     router.push({ name: 'list' })
@@ -144,17 +131,6 @@ function onCancel() {
       label-width="120px"
       label-position="right"
     >
-      <el-form-item label="使用者" prop="userId" v-if="mode === 'create'">
-        <el-select v-model="form.userId" style="width: 100%">
-          <el-option
-            v-for="u in SEED_USERS"
-            :key="u.id"
-            :label="`${u.id}（${u.name}）`"
-            :value="u.id"
-          />
-        </el-select>
-      </el-form-item>
-
       <el-form-item label="產品名稱" prop="productName">
         <el-input v-model="form.productName" maxlength="100" show-word-limit placeholder="例：美元定存" />
       </el-form-item>

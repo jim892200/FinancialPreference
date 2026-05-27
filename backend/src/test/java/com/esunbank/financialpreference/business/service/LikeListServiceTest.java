@@ -79,6 +79,18 @@ class LikeListServiceTest {
         assertSame(ErrorCode.INVALID_QUANTITY, ex.errorCode());
     }
 
+    @Test
+    void create_accountMismatch_throwsBusinessException() {
+        when(repository.insert(any(), any(), any(), any(), anyInt(), any()))
+                .thenThrow(uncategorizedSql(50005, "ACCOUNT_MISMATCH"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                service.create(new CreateLikeCommand(
+                        USER_ID, "x", new BigDecimal("100"), new BigDecimal("0.01"), 1, "wrong-acct")));
+
+        assertSame(ErrorCode.ACCOUNT_MISMATCH, ex.errorCode());
+    }
+
     // ---------- list ----------
 
     @Test
@@ -105,13 +117,25 @@ class LikeListServiceTest {
     @Test
     void update_likeNotFound_throwsBusinessException() {
         doThrow(uncategorizedSql(50003, "LIKE_NOT_FOUND"))
-                .when(repository).update(anyLong(), anyString(), any(), any(), anyInt(), anyString());
+                .when(repository).update(anyLong(), anyString(), anyString(), any(), any(), anyInt(), anyString());
 
         BusinessException ex = assertThrows(BusinessException.class, () ->
                 service.update(new UpdateLikeCommand(
-                        999L, "x", new BigDecimal("100"), new BigDecimal("0.01"), 1, ACCOUNT)));
+                        999L, USER_ID, "x", new BigDecimal("100"), new BigDecimal("0.01"), 1, ACCOUNT)));
 
         assertSame(ErrorCode.LIKE_NOT_FOUND, ex.errorCode());
+    }
+
+    @Test
+    void update_forbidden_throwsBusinessException() {
+        doThrow(uncategorizedSql(50004, "FORBIDDEN"))
+                .when(repository).update(anyLong(), anyString(), anyString(), any(), any(), anyInt(), anyString());
+
+        BusinessException ex = assertThrows(BusinessException.class, () ->
+                service.update(new UpdateLikeCommand(
+                        1L, "other", "x", new BigDecimal("100"), new BigDecimal("0.01"), 1, ACCOUNT)));
+
+        assertSame(ErrorCode.FORBIDDEN, ex.errorCode());
     }
 
     // ---------- delete ----------
@@ -119,18 +143,27 @@ class LikeListServiceTest {
     @Test
     void delete_likeNotFound_throwsBusinessException() {
         doThrow(uncategorizedSql(50003, "LIKE_NOT_FOUND"))
-                .when(repository).delete(anyLong());
+                .when(repository).delete(anyLong(), anyString());
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(999L));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(999L, USER_ID));
         assertSame(ErrorCode.LIKE_NOT_FOUND, ex.errorCode());
+    }
+
+    @Test
+    void delete_forbidden_throwsBusinessException() {
+        doThrow(uncategorizedSql(50004, "FORBIDDEN"))
+                .when(repository).delete(anyLong(), anyString());
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(1L, "other"));
+        assertSame(ErrorCode.FORBIDDEN, ex.errorCode());
     }
 
     @Test
     void delete_unknownDbError_mapsToInternal() {
         doThrow(uncategorizedSql(99999, "some weird error"))
-                .when(repository).delete(anyLong());
+                .when(repository).delete(anyLong(), anyString());
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(1L));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(1L, USER_ID));
         assertSame(ErrorCode.INTERNAL_ERROR, ex.errorCode());
     }
 

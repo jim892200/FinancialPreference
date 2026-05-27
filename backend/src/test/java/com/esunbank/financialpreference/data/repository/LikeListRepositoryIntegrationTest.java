@@ -51,6 +51,7 @@ class LikeListRepositoryIntegrationTest {
             // UPDATE：改數量與費率，金額應重算
             repo.update(
                     sn,
+                    SEED_USER_ID,
                     "更新後名稱",
                     new BigDecimal("200.00"),
                     new BigDecimal("0.0200"),
@@ -68,7 +69,7 @@ class LikeListRepositoryIntegrationTest {
 
         } finally {
             // DELETE：必須同步刪除對應 PRODUCT，再次查詢應找不到
-            repo.delete(sn);
+            repo.delete(sn, SEED_USER_ID);
             assertTrue(findBySn(sn).isEmpty(), "deleted SN should not appear");
         }
     }

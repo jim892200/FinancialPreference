@@ -12,17 +12,22 @@ import com.esunbank.financialpreference.presentation.advice.GlobalExceptionHandl
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.security.Principal;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,13 +38,27 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * Controller 邏輯測試。Security filter 已停用（addFilters = false）；
+ * 認證與越權的整合測試在 {@code LikeListControllerSecurityTest}。
+ *
+ * 透過 SecurityMockMvcRequestPostProcessors.authentication(...) 注入 JWT principal（String），
+ * 對應 controller 的 @AuthenticationPrincipal String userId。
+ */
 @WebMvcTest(LikeListController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @Import(GlobalExceptionHandler.class)
 class LikeListControllerTest {
+
+    private static final String USER_A = "A1236456789";
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @MockitoBean LikeListService service;
+
+    private static Principal authAs(String userId) {
+        return new UsernamePasswordAuthenticationToken(userId, null, List.of());
+    }
 
     // ---------- POST ----------
 
@@ -49,8 +68,7 @@ class LikeListControllerTest {
 
         String body = """
                 {
-                  "userId": "A1236456789",
-                  "productName": "玉山美元定存",
+                  "productName": "美元定存",
                   "price": 1000.00,
                   "feeRate": 0.0100,
                   "purchaseQuantity": 5,
@@ -59,6 +77,7 @@ class LikeListControllerTest {
                 """;
 
         mvc.perform(post("/api/v1/likes")
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -67,11 +86,10 @@ class LikeListControllerTest {
     }
 
     @Test
-    void create_blankUserId_returns400Validation() throws Exception {
+    void create_blankProductName_returns400Validation() throws Exception {
         String body = """
                 {
-                  "userId": "",
-                  "productName": "x",
+                  "productName": "",
                   "price": 1.00,
                   "feeRate": 0.01,
                   "purchaseQuantity": 1,
@@ -80,6 +98,7 @@ class LikeListControllerTest {
                 """;
 
         mvc.perform(post("/api/v1/likes")
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -90,7 +109,6 @@ class LikeListControllerTest {
     void create_quantityZero_returns400Validation() throws Exception {
         String body = """
                 {
-                  "userId": "A1",
                   "productName": "x",
                   "price": 1.00,
                   "feeRate": 0.01,
@@ -100,6 +118,7 @@ class LikeListControllerTest {
                 """;
 
         mvc.perform(post("/api/v1/likes")
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -107,44 +126,44 @@ class LikeListControllerTest {
     }
 
     @Test
-    void create_userNotFound_returns404FromBusinessException() throws Exception {
+    void create_accountMismatch_returns400() throws Exception {
         when(service.create(any(CreateLikeCommand.class)))
-                .thenThrow(new BusinessException(ErrorCode.USER_NOT_FOUND));
+                .thenThrow(new BusinessException(ErrorCode.ACCOUNT_MISMATCH));
 
         String body = """
                 {
-                  "userId": "ghost",
                   "productName": "x",
                   "price": 1.00,
                   "feeRate": 0.01,
                   "purchaseQuantity": 1,
-                  "account": "a"
+                  "account": "wrong-acct"
                 }
                 """;
 
         mvc.perform(post("/api/v1/likes")
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(ErrorCode.USER_NOT_FOUND.code()));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.ACCOUNT_MISMATCH.code()));
     }
 
     // ---------- GET ----------
 
     @Test
-    void list_returnsItemsArray() throws Exception {
+    void list_returnsItemsArrayForAuthenticatedUser() throws Exception {
         LikeItem item = new LikeItem(
                 1L,
-                new User("A1", "王o明", "test@email.com", null),
+                new User(USER_A, "王o明", "test@email.com", null),
                 new Product(10L, "p", new BigDecimal("100.00"), new BigDecimal("0.0100")),
                 5,
                 "acct1",
                 new BigDecimal("5.00"),
                 new BigDecimal("505.00")
         );
-        when(service.listByUserId("A1")).thenReturn(List.of(item));
+        when(service.listByUserId(USER_A)).thenReturn(List.of(item));
 
-        mvc.perform(get("/api/v1/likes").param("userId", "A1"))
+        mvc.perform(get("/api/v1/likes").principal(authAs(USER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data[0].sn").value(1))
@@ -153,20 +172,13 @@ class LikeListControllerTest {
     }
 
     @Test
-    void list_unknownUser_returnsEmptyDataNot404() throws Exception {
-        when(service.listByUserId("nobody")).thenReturn(List.of());
+    void list_emptyResult_returnsEmptyArray() throws Exception {
+        when(service.listByUserId(USER_A)).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/likes").param("userId", "nobody"))
+        mvc.perform(get("/api/v1/likes").principal(authAs(USER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data").isArray());
-    }
-
-    @Test
-    void list_missingUserIdParam_returns400() throws Exception {
-        mvc.perform(get("/api/v1/likes"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(ErrorCode.VALIDATION_FAILED.code()));
     }
 
     // ---------- PUT ----------
@@ -184,6 +196,7 @@ class LikeListControllerTest {
                 """;
 
         mvc.perform(put("/api/v1/likes/{sn}", 1L)
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -208,36 +221,70 @@ class LikeListControllerTest {
                 """;
 
         mvc.perform(put("/api/v1/likes/{sn}", 999L)
+                        .principal(authAs(USER_A))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(ErrorCode.LIKE_NOT_FOUND.code()));
     }
 
+    @Test
+    void update_otherUsersSn_returns403Forbidden() throws Exception {
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN))
+                .when(service).update(any(UpdateLikeCommand.class));
+
+        String body = """
+                {
+                  "productName": "x",
+                  "price": 1.00,
+                  "feeRate": 0.01,
+                  "purchaseQuantity": 1,
+                  "account": "a"
+                }
+                """;
+
+        mvc.perform(put("/api/v1/likes/{sn}", 1L)
+                        .principal(authAs(USER_A))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(ErrorCode.FORBIDDEN.code()));
+    }
+
     // ---------- DELETE ----------
 
     @Test
     void delete_returns200() throws Exception {
-        mvc.perform(delete("/api/v1/likes/{sn}", 1L))
+        mvc.perform(delete("/api/v1/likes/{sn}", 1L).principal(authAs(USER_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
 
-        verify(service).delete(1L);
+        verify(service).delete(eq(1L), eq(USER_A));
     }
 
     @Test
     void delete_likeNotFound_returns404() throws Exception {
         doThrow(new BusinessException(ErrorCode.LIKE_NOT_FOUND))
-                .when(service).delete(anyLong());
+                .when(service).delete(anyLong(), anyString());
 
-        mvc.perform(delete("/api/v1/likes/{sn}", 999L))
+        mvc.perform(delete("/api/v1/likes/{sn}", 999L).principal(authAs(USER_A)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(ErrorCode.LIKE_NOT_FOUND.code()));
     }
 
     @Test
+    void delete_otherUsersSn_returns403() throws Exception {
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN))
+                .when(service).delete(anyLong(), anyString());
+
+        mvc.perform(delete("/api/v1/likes/{sn}", 1L).principal(authAs(USER_A)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(ErrorCode.FORBIDDEN.code()));
+    }
+
+    @Test
     void delete_negativeSn_returns400Validation() throws Exception {
-        mvc.perform(delete("/api/v1/likes/{sn}", -1L))
+        mvc.perform(delete("/api/v1/likes/{sn}", -1L).principal(authAs(USER_A)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(ErrorCode.VALIDATION_FAILED.code()));
     }

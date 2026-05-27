@@ -1,17 +1,25 @@
 /* =============================================================================
    FinancialPreference - 02_stored_procedures.sql
-   Stored Procedure 定義（4 支）
+   Stored Procedure 定義（5 支）
 
    - SP_LIKE_INSERT          新增喜好（INSERT PRODUCT + INSERT LIKE_LIST）
    - SP_LIKE_QUERY_BY_USER   查詢某 USER 的喜好清單（三表 JOIN）
-   - SP_LIKE_UPDATE          更新產品 + 數量 + 帳號（重算金額）
-   - SP_LIKE_DELETE          刪除喜好（DELETE LIKE_LIST + DELETE PRODUCT）
+   - SP_LIKE_UPDATE          更新產品 + 數量 + 帳號（重算金額）— 帶 ownership 檢查
+   - SP_LIKE_DELETE          刪除喜好（DELETE LIKE_LIST + DELETE PRODUCT）— 帶 ownership 檢查
+   - SP_USER_LOGIN_LOOKUP    依 USER_ID 撈出登入所需資訊
 
    規範：
      1. 全部具名參數，杜絕 SQL Injection
      2. 跨表異動均在 BEGIN TRY / BEGIN TRAN / COMMIT / ROLLBACK / THROW 包覆
      3. 金額欄位一律 DECIMAL
      4. INSERT/UPDATE 一律重算 TOTAL_FEE、TOTAL_AMOUNT
+
+   錯誤碼：
+     50001 USER_NOT_FOUND
+     50002 INVALID_QUANTITY
+     50003 LIKE_NOT_FOUND
+     50004 FORBIDDEN          — 該 SN 不屬於請求者
+     50005 ACCOUNT_MISMATCH   — @ACCOUNT 與 USER.ACCOUNT 不一致
    ============================================================================= */
 
 SET NOCOUNT ON;
@@ -22,6 +30,7 @@ GO
 -- =============================================================================
 -- SP_LIKE_INSERT
 --   INSERT PRODUCT → 取 SCOPE_IDENTITY() → INSERT LIKE_LIST
+--   先驗證 @ACCOUNT 與 USER.ACCOUNT 一致，避免使用者把扣款帳號改成別人的
 --   OUT 參數 @NEW_SN 回傳新增的 LIKE_LIST.SN
 -- =============================================================================
 IF OBJECT_ID(N'dbo.SP_LIKE_INSERT', N'P') IS NOT NULL
@@ -44,11 +53,20 @@ BEGIN
     BEGIN TRY
         BEGIN TRAN;
 
-        IF NOT EXISTS (SELECT 1 FROM dbo.[USER] WHERE USER_ID = @USER_ID)
+        DECLARE @USER_ACCOUNT VARCHAR(20);
+
+        SELECT @USER_ACCOUNT = ACCOUNT
+        FROM   dbo.[USER]
+        WHERE  USER_ID = @USER_ID;
+
+        IF @USER_ACCOUNT IS NULL
             THROW 50001, 'USER_NOT_FOUND', 1;
 
         IF @PURCHASE_QUANTITY <= 0
             THROW 50002, 'INVALID_QUANTITY', 1;
+
+        IF @ACCOUNT <> @USER_ACCOUNT
+            THROW 50005, 'ACCOUNT_MISMATCH', 1;
 
         DECLARE @PRODUCT_NO BIGINT;
 
@@ -115,6 +133,8 @@ GO
 -- =============================================================================
 -- SP_LIKE_UPDATE
 --   依 SN 更新 PRODUCT（名稱/價格/費率）與 LIKE_LIST（數量/帳號），並重算金額
+--   @USER_ID 用於 ownership 檢查，避免越權修改他人喜好（IDOR）
+--   @ACCOUNT 必須與 USER.ACCOUNT 一致
 -- =============================================================================
 IF OBJECT_ID(N'dbo.SP_LIKE_UPDATE', N'P') IS NOT NULL
     DROP PROCEDURE dbo.SP_LIKE_UPDATE;
@@ -122,6 +142,7 @@ GO
 
 CREATE PROCEDURE dbo.SP_LIKE_UPDATE
     @SN                 BIGINT,
+    @USER_ID            VARCHAR(20),
     @PRODUCT_NAME       NVARCHAR(100),
     @PRICE              DECIMAL(18, 2),
     @FEE_RATE           DECIMAL(5, 4),
@@ -136,16 +157,27 @@ BEGIN
         BEGIN TRAN;
 
         DECLARE @PRODUCT_NO BIGINT;
+        DECLARE @OWNER_ID   VARCHAR(20);
 
-        SELECT @PRODUCT_NO = PRODUCT_NO
+        SELECT @PRODUCT_NO = PRODUCT_NO,
+               @OWNER_ID   = USER_ID
         FROM   dbo.LIKE_LIST
         WHERE  SN = @SN;
 
         IF @PRODUCT_NO IS NULL
             THROW 50003, 'LIKE_NOT_FOUND', 1;
 
+        IF @OWNER_ID <> @USER_ID
+            THROW 50004, 'FORBIDDEN', 1;
+
         IF @PURCHASE_QUANTITY <= 0
             THROW 50002, 'INVALID_QUANTITY', 1;
+
+        DECLARE @USER_ACCOUNT VARCHAR(20);
+        SELECT @USER_ACCOUNT = ACCOUNT FROM dbo.[USER] WHERE USER_ID = @USER_ID;
+
+        IF @ACCOUNT <> @USER_ACCOUNT
+            THROW 50005, 'ACCOUNT_MISMATCH', 1;
 
         UPDATE dbo.PRODUCT
         SET    PRODUCT_NAME = @PRODUCT_NAME,
@@ -176,13 +208,15 @@ GO
 -- =============================================================================
 -- SP_LIKE_DELETE
 --   依 SN 刪除 LIKE_LIST，再刪除對應 PRODUCT（先子後父，避免 FK 違反）
+--   @USER_ID 用於 ownership 檢查（IDOR 防護）
 -- =============================================================================
 IF OBJECT_ID(N'dbo.SP_LIKE_DELETE', N'P') IS NOT NULL
     DROP PROCEDURE dbo.SP_LIKE_DELETE;
 GO
 
 CREATE PROCEDURE dbo.SP_LIKE_DELETE
-    @SN BIGINT
+    @SN         BIGINT,
+    @USER_ID    VARCHAR(20)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -192,13 +226,18 @@ BEGIN
         BEGIN TRAN;
 
         DECLARE @PRODUCT_NO BIGINT;
+        DECLARE @OWNER_ID   VARCHAR(20);
 
-        SELECT @PRODUCT_NO = PRODUCT_NO
+        SELECT @PRODUCT_NO = PRODUCT_NO,
+               @OWNER_ID   = USER_ID
         FROM   dbo.LIKE_LIST
         WHERE  SN = @SN;
 
         IF @PRODUCT_NO IS NULL
             THROW 50003, 'LIKE_NOT_FOUND', 1;
+
+        IF @OWNER_ID <> @USER_ID
+            THROW 50004, 'FORBIDDEN', 1;
 
         DELETE FROM dbo.LIKE_LIST WHERE SN = @SN;
         DELETE FROM dbo.PRODUCT   WHERE NO = @PRODUCT_NO;
@@ -209,5 +248,75 @@ BEGIN
         IF @@TRANCOUNT > 0 ROLLBACK TRAN;
         THROW;
     END CATCH
+END
+GO
+
+
+-- =============================================================================
+-- SP_USER_LOGIN_LOOKUP
+--   依 USER_ID 撈出登入驗證所需資料（PASSWORD_HASH + 基本資訊）
+--   BCrypt 驗證由 Java 層完成
+-- =============================================================================
+IF OBJECT_ID(N'dbo.SP_USER_LOGIN_LOOKUP', N'P') IS NOT NULL
+    DROP PROCEDURE dbo.SP_USER_LOGIN_LOOKUP;
+GO
+
+CREATE PROCEDURE dbo.SP_USER_LOGIN_LOOKUP
+    @USER_ID VARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT  USER_ID,
+            USER_NAME,
+            EMAIL,
+            ACCOUNT,
+            PASSWORD_HASH
+    FROM    dbo.[USER]
+    WHERE   USER_ID = @USER_ID;
+END
+GO
+
+
+-- =============================================================================
+-- SP_USER_LIST_PENDING_PASSWORDS
+--   列出所有 PASSWORD_HASH 為空的 USER_ID（供首次啟動 seed BCrypt hash）
+-- =============================================================================
+IF OBJECT_ID(N'dbo.SP_USER_LIST_PENDING_PASSWORDS', N'P') IS NOT NULL
+    DROP PROCEDURE dbo.SP_USER_LIST_PENDING_PASSWORDS;
+GO
+
+CREATE PROCEDURE dbo.SP_USER_LIST_PENDING_PASSWORDS
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT  USER_ID
+    FROM    dbo.[USER]
+    WHERE   PASSWORD_HASH IS NULL
+       OR   PASSWORD_HASH = '';
+END
+GO
+
+
+-- =============================================================================
+-- SP_USER_SET_PASSWORD_HASH
+--   為指定 USER 寫入 BCrypt hash（僅在原本為空時更新，避免覆寫已設定的密碼）
+-- =============================================================================
+IF OBJECT_ID(N'dbo.SP_USER_SET_PASSWORD_HASH', N'P') IS NOT NULL
+    DROP PROCEDURE dbo.SP_USER_SET_PASSWORD_HASH;
+GO
+
+CREATE PROCEDURE dbo.SP_USER_SET_PASSWORD_HASH
+    @USER_ID        VARCHAR(20),
+    @PASSWORD_HASH  VARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE dbo.[USER]
+    SET    PASSWORD_HASH = @PASSWORD_HASH
+    WHERE  USER_ID = @USER_ID
+      AND  (PASSWORD_HASH IS NULL OR PASSWORD_HASH = '');
 END
 GO

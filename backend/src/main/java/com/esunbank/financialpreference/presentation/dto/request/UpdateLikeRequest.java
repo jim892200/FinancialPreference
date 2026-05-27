@@ -40,7 +40,7 @@ public record UpdateLikeRequest(
         @NotBlank @Size(max = 20)
         String account
 ) {
-    public UpdateLikeCommand toCommand(long sn) {
-        return new UpdateLikeCommand(sn, productName, price, feeRate, purchaseQuantity, account);
+    public UpdateLikeCommand toCommand(long sn, String userId) {
+        return new UpdateLikeCommand(sn, userId, productName, price, feeRate, purchaseQuantity, account);
     }
 }

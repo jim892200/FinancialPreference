@@ -69,6 +69,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       MSSQL_PASSWORD: "${MSSQL_SA_PASSWORD:-YourStrong@Passw0rd}"
+      APP_JWT_SECRET: "${APP_JWT_SECRET:-dev-only-jwt-secret-please-override-32+chars}"
+      APP_JWT_TTL_MINUTES: "${APP_JWT_TTL_MINUTES:-60}"
     ports:
       - "8080:8080"
 

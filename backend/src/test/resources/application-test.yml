@@ -1,0 +1,19 @@
+# 測試專用 profile：複用 dev 的資料來源設定但停用 DevPasswordSeedRunner（@Profile("dev","docker")）。
+# SimpleJdbcCall 與 HikariCP 都是 lazy，context 載入時不會真正連 DB；
+# 凡是真的需要 round-trip 的測試請改用 @EnabledIfEnvironmentVariable 守門。
+spring:
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=FinancialPreference;encrypt=true;trustServerCertificate=true
+    username: sa
+    password: ${MSSQL_PASSWORD:}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 0
+      connection-timeout: 5000
+      initialization-fail-timeout: -1   # 啟動時不立即驗證連線，避免無 DB 環境 build 失敗
+
+app:
+  jwt:
+    secret: test-secret-test-secret-test-secret-1234
+    ttl-minutes: 60

@@ -18,10 +18,10 @@ import java.util.Map;
  * 所有資料異動透過 Stored Procedure 完成（具名參數），不在 Java 端拼接 SQL。
  *
  * 對應 SP：
- *   - SP_LIKE_INSERT         (OUT @NEW_SN)
+ *   - SP_LIKE_INSERT         (OUT @NEW_SN，含 ACCOUNT 一致性檢查)
  *   - SP_LIKE_QUERY_BY_USER  (回傳 ResultSet)
- *   - SP_LIKE_UPDATE
- *   - SP_LIKE_DELETE
+ *   - SP_LIKE_UPDATE         (含 @USER_ID ownership 檢查)
+ *   - SP_LIKE_DELETE         (含 @USER_ID ownership 檢查)
  */
 @Repository
 public class LikeListRepository {
@@ -66,6 +66,7 @@ public class LikeListRepository {
                 .withoutProcedureColumnMetaDataAccess()
                 .declareParameters(
                         new SqlParameter(P_SN,                Types.BIGINT),
+                        new SqlParameter(P_USER_ID,           Types.VARCHAR),
                         new SqlParameter(P_PRODUCT_NAME,      Types.NVARCHAR),
                         new SqlParameter(P_PRICE,             Types.DECIMAL),
                         new SqlParameter(P_FEE_RATE,          Types.DECIMAL),
@@ -76,7 +77,10 @@ public class LikeListRepository {
         this.deleteCall = new SimpleJdbcCall(dataSource)
                 .withProcedureName("SP_LIKE_DELETE")
                 .withoutProcedureColumnMetaDataAccess()
-                .declareParameters(new SqlParameter(P_SN, Types.BIGINT));
+                .declareParameters(
+                        new SqlParameter(P_SN,      Types.BIGINT),
+                        new SqlParameter(P_USER_ID, Types.VARCHAR)
+                );
     }
 
     public long insert(String userId,
@@ -106,6 +110,7 @@ public class LikeListRepository {
     }
 
     public void update(long sn,
+                       String userId,
                        String productName,
                        BigDecimal price,
                        BigDecimal feeRate,
@@ -113,6 +118,7 @@ public class LikeListRepository {
                        String account) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue(P_SN,                sn,                Types.BIGINT)
+                .addValue(P_USER_ID,           userId,            Types.VARCHAR)
                 .addValue(P_PRODUCT_NAME,      productName,       Types.NVARCHAR)
                 .addValue(P_PRICE,             price,             Types.DECIMAL)
                 .addValue(P_FEE_RATE,          feeRate,           Types.DECIMAL)
@@ -121,9 +127,10 @@ public class LikeListRepository {
         updateCall.execute(params);
     }
 
-    public void delete(long sn) {
+    public void delete(long sn, String userId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue(P_SN, sn, Types.BIGINT);
+                .addValue(P_SN,      sn,     Types.BIGINT)
+                .addValue(P_USER_ID, userId, Types.VARCHAR);
         deleteCall.execute(params);
     }
 }

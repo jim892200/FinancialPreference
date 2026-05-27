@@ -1,19 +1,20 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
-import { listLikes, deleteLike, SEED_USERS } from '../api/likeListApi.js'
+import { listLikes, deleteLike } from '../api/likeListApi.js'
+import { useAuthStore } from '../stores/auth.js'
 
 const router = useRouter()
-const userId = ref(SEED_USERS[0].id)
+const auth = useAuthStore()
 const items = ref([])
 const loading = ref(false)
 
 async function refresh() {
   loading.value = true
   try {
-    items.value = await listLikes(userId.value)
+    items.value = await listLikes()
   } catch (err) {
     ElMessage.error(err.apiMessage || '載入失敗')
     items.value = []
@@ -46,7 +47,7 @@ async function onDelete(item) {
 }
 
 function onCreate() {
-  router.push({ name: 'create', query: { userId: userId.value } })
+  router.push({ name: 'create' })
 }
 
 function onEdit(item) {
@@ -72,7 +73,6 @@ function formatMoney(value) {
   })
 }
 
-watch(userId, refresh)
 onMounted(refresh)
 </script>
 
@@ -81,24 +81,12 @@ onMounted(refresh)
     <template #header>
       <div class="card-header">
         <div class="left">
-          <span class="card-title">喜好商品清單</span>
+          <span class="card-title">{{ auth.userName }} 的喜好商品清單</span>
           <span class="user-info" v-if="items.length > 0">
             共 {{ items.length }} 筆
           </span>
         </div>
         <div class="right">
-          <el-select
-            v-model="userId"
-            placeholder="選擇使用者"
-            style="width: 240px"
-          >
-            <el-option
-              v-for="u in SEED_USERS"
-              :key="u.id"
-              :label="`${u.id}（${u.name}）`"
-              :value="u.id"
-            />
-          </el-select>
           <el-button type="primary" :icon="Plus" @click="onCreate">
             新增喜好
           </el-button>

@@ -18,12 +18,14 @@ GO
 
 -- -----------------------------------------------------------------------------
 -- USER：使用者
+--   PASSWORD_HASH 為 BCrypt（含 $2a$10$ 前綴），由後端啟動時 Seeder 填入。
 -- -----------------------------------------------------------------------------
 CREATE TABLE dbo.[USER] (
-    USER_ID     VARCHAR(20)   NOT NULL,
-    USER_NAME   NVARCHAR(50)  NOT NULL,
-    EMAIL       VARCHAR(100)  NOT NULL,
-    ACCOUNT     VARCHAR(20)   NOT NULL,
+    USER_ID         VARCHAR(20)   NOT NULL,
+    USER_NAME       NVARCHAR(50)  NOT NULL,
+    EMAIL           VARCHAR(100)  NOT NULL,
+    ACCOUNT         VARCHAR(20)   NOT NULL,
+    PASSWORD_HASH   VARCHAR(100)  NOT NULL CONSTRAINT DF_USER_PWD DEFAULT '',
     CONSTRAINT PK_USER PRIMARY KEY CLUSTERED (USER_ID)
 );
 GO
