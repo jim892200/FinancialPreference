@@ -33,25 +33,58 @@
 
 ## 快速開始（Docker）
 
-1 條指令起 MSSQL，3 條指令載入 schema / SP / seed：
+**一條指令拉起整個系統**（DB + 後端 + 前端）：
 
 ```powershell
-# 1. 啟動 MSSQL（在專案根目錄）
-docker compose up -d
-
-# 2. 等 ~15 秒 MSSQL 健康後，建立資料庫
-docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd `
-  -S localhost -U sa -P "YourStrong@Passw0rd" -C `
-  -Q "IF DB_ID(N'FinancialPreference') IS NULL CREATE DATABASE FinancialPreference;"
-
-# 3. 載入 schema / SP / seed
-docker cp DB sql2022:/tmp/DB
-docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -C -d FinancialPreference -i /tmp/DB/01_schema.sql
-docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -C -d FinancialPreference -i /tmp/DB/02_stored_procedures.sql
-docker exec sql2022 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -C -d FinancialPreference -i /tmp/DB/03_seed_data.sql
+docker compose up -d --build
 ```
 
-接著啟動後端與前端（見下方 [安裝與執行（手動）](#安裝與執行手動)），但**跳過資料庫初始化那一步**即可。
+`docker-compose.yml` 已串好啟動順序：
+
+| Service | 角色 | Port |
+|---------|------|------|
+| `sql2022` | MS SQL Server 2022 | `1433` |
+| `db-init` | 一次性建立 DB / 載入 schema / SP / seed（idempotent，已存在就跳過） | — |
+| `backend` | Spring Boot REST API（含 actuator healthcheck） | `8080` |
+| `frontend` | Nginx 提供 Vue build，並 reverse-proxy `/api` 至 backend | `5173` (對外) → `80` (內部) |
+
+依賴順序：`sql2022` healthy → `db-init` 完成 → `backend` healthy → `frontend` 啟動。
+
+啟動後可直接使用：
+
+| 服務 | 網址 |
+|------|------|
+| 前端（SPA） | http://localhost:5173 |
+| REST API | http://localhost:8080/api/v1/likes |
+| Swagger UI | http://localhost:8080/swagger-ui/index.html |
+| Actuator Health | http://localhost:8080/actuator/health |
+
+### 自訂 sa 密碼
+
+預設密碼為 `YourStrong@Passw0rd`。要改：
+
+```powershell
+$env:MSSQL_SA_PASSWORD = "<你的密碼>"
+docker compose up -d --build
+```
+
+或於專案根目錄新增 `.env` 檔：
+```
+MSSQL_SA_PASSWORD=<你的密碼>
+```
+
+### 重新初始化資料
+
+```powershell
+docker compose down -v          # -v 一併清掉 mssql-data volume
+docker compose up -d --build
+```
+
+### 只看後端 log
+
+```powershell
+docker compose logs -f backend
+```
 
 ---
 

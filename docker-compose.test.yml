@@ -1,24 +1,27 @@
-# One-shot stack for the FinancialPreference assignment.
+# Isolated test stack — verifies that `docker compose up` brings the whole app up in one shot.
+# Uses different host ports so it won't clash with the existing sql2022 container.
+#
 # Usage:
-#   docker compose up -d --build
-# Services:
-#   sql2022   — MS SQL Server 2022 (port 1433)
-#   db-init   — one-time DB / schema / SP / seed loader (idempotent)
-#   backend   — Spring Boot REST API on :8080
-#   frontend  — Nginx serving Vue build + reverse-proxying /api to backend (:5173 → :80)
+#   docker compose -p fp-test -f docker-compose.test.yml up -d --build
+#   docker compose -p fp-test -f docker-compose.test.yml down -v
+#
+# Host ports:
+#   SQL Server : 1434
+#   Backend    : 8081
+#   Frontend   : 5174
 
 services:
   sql2022:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: fp-sql2022
+    container_name: fp-test-sql2022
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-YourStrong@Passw0rd}"
+      MSSQL_SA_PASSWORD: "YourStrong@Passw0rd"
       MSSQL_PID: "Developer"
     ports:
-      - "1433:1433"
+      - "1434:1433"
     volumes:
-      - mssql-data:/var/opt/mssql
+      - mssql-data-test:/var/opt/mssql
     healthcheck:
       test:
         - CMD-SHELL
@@ -30,15 +33,15 @@ services:
 
   db-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: fp-db-init
+    container_name: fp-test-db-init
     depends_on:
       sql2022:
         condition: service_healthy
     environment:
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-YourStrong@Passw0rd}"
+      MSSQL_SA_PASSWORD: "YourStrong@Passw0rd"
     volumes:
       - ./DB:/scripts:ro
-    entrypoint: [ "/bin/bash", "-c" ]
+    entrypoint: ["/bin/bash","-c"]
     command:
       - |
         set -e
@@ -62,24 +65,24 @@ services:
 
   backend:
     build: ./backend
-    container_name: fp-backend
+    container_name: fp-test-backend
     depends_on:
       db-init:
         condition: service_completed_successfully
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      MSSQL_PASSWORD: "${MSSQL_SA_PASSWORD:-YourStrong@Passw0rd}"
+      MSSQL_PASSWORD: "YourStrong@Passw0rd"
     ports:
-      - "8080:8080"
+      - "8081:8080"
 
   frontend:
     build: ./frontend
-    container_name: fp-frontend
+    container_name: fp-test-frontend
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - "5173:80"
+      - "5174:80"
 
 volumes:
-  mssql-data:
+  mssql-data-test:
