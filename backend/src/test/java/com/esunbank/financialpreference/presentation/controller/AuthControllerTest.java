@@ -31,7 +31,7 @@ class AuthControllerTest {
     @Test
     void login_success_returnsToken() throws Exception {
         when(authService.login(eq("A1236456789"), eq("Test@1234")))
-                .thenReturn(new LoginResponse("jwt.token.value", "Bearer", 3600, "A1236456789", "王o明"));
+                .thenReturn(new LoginResponse("jwt.token.value", "Bearer", 3600, "A1236456789", "王o明", "1111999666"));
 
         String body = """
                 { "userId": "A1236456789", "password": "Test@1234" }

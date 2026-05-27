@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Check } from '@element-plus/icons-vue'
 import { createLike, updateLike } from '../api/likeListApi.js'
+import { useAuthStore } from '../stores/auth.js'
 
 const props = defineProps({
   mode: { type: String, required: true },   // 'create' | 'edit'
@@ -11,6 +12,7 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const auth = useAuthStore()
 const formRef = ref(null)
 const submitting = ref(false)
 
@@ -19,7 +21,7 @@ const form = reactive({
   price: null,
   feeRate: null,
   purchaseQuantity: 1,
-  account: '',
+  account: auth.account,
 })
 
 const rules = {
@@ -68,6 +70,9 @@ const rules = {
 }
 
 onMounted(() => {
+  // 不論 create / edit，account 一律強制使用登入者的 USER.ACCOUNT（後端會驗證一致性）
+  form.account = auth.account
+
   if (props.mode === 'create') return
   const stateItem = window.history.state?.item
   if (stateItem) {
@@ -75,7 +80,6 @@ onMounted(() => {
     form.price = Number(stateItem.price)
     form.feeRate = Number(stateItem.feeRate)
     form.purchaseQuantity = Number(stateItem.purchaseQuantity)
-    form.account = stateItem.account
   } else {
     ElMessage.warning('找不到原始資料，請從列表進入編輯。')
   }
@@ -171,7 +175,8 @@ function onCancel() {
       </el-form-item>
 
       <el-form-item label="扣款帳號" prop="account">
-        <el-input v-model="form.account" maxlength="20" show-word-limit placeholder="例：1111999666" />
+        <el-input v-model="form.account" maxlength="20" readonly />
+        <div class="hint-text">登入帳戶的扣款帳號，不可修改</div>
       </el-form-item>
 
       <el-form-item>

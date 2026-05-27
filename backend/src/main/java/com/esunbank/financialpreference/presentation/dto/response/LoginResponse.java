@@ -18,5 +18,8 @@ public record LoginResponse(
         String userId,
 
         @Schema(description = "使用者名稱", example = "王o明")
-        String userName
+        String userName,
+
+        @Schema(description = "扣款帳號（前端可預填表單）", example = "1111999666")
+        String account
 ) {}

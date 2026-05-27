@@ -32,6 +32,7 @@ async function onSubmit() {
       token: data.token,
       userId: data.userId,
       userName: data.userName,
+      account: data.account,
     })
     ElMessage.success(`歡迎回來，${data.userName}`)
     const redirect = route.query.redirect && typeof route.query.redirect === 'string'
@@ -83,7 +84,10 @@ async function onSubmit() {
         </el-form-item>
       </el-form>
 
-      <div class="hint">預設測試帳號：<code>A1236456789</code> / <code>B9876543210</code> ／ 密碼 <code>Test@1234</code></div>
+      <div class="hint">
+        <div>預設測試帳號：<code>A1236456789</code> / <code>B9876543210</code></div>
+        <div>密碼：<code>Test@1234</code></div>
+      </div>
     </el-card>
   </div>
 </template>

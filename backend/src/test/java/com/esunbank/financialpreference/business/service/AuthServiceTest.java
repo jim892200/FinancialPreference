@@ -45,6 +45,7 @@ class AuthServiceTest {
         assertEquals(3600, resp.expiresIn());
         assertEquals("A1", resp.userId());
         assertEquals("王o明", resp.userName());
+        assertEquals("111", resp.account());
     }
 
     @Test

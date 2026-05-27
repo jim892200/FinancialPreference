@@ -54,7 +54,8 @@ public class AuthService {
                 "Bearer",
                 issued.expiresInSeconds(),
                 cred.userId(),
-                cred.userName()
+                cred.userName(),
+                cred.account()
         );
     }
 }
